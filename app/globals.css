@@ -5,7 +5,7 @@
   --foreground: #171717;
 }
 
-@theme inline {
+:root {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -19,8 +19,1640 @@
   }
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #090a0c;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+
+  background:
+    #090a0c;
+
+  color:
+    var(--foreground);
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+
+/* =====================================================
+   MAIN APP
+===================================================== */
+
+.album-app {
+  min-height:
+    100vh;
+
+  padding:
+    40px;
+
+  color:
+    #ffffff;
+
+  background:
+
+    radial-gradient(
+      circle
+      at 50% 0%,
+      #17191d 0%,
+      #0b0c0e 50%,
+      #08090a 100%
+    );
+}
+
+
+.album-workspace {
+  width:
+    min(
+      1450px,
+      100%
+    );
+
+  margin:
+    0 auto;
+}
+
+
+.prototype-title {
+  margin:
+    0;
+
+  font-size:
+    20px;
+}
+
+
+.upload-area {
+  margin-top:
+    30px;
+}
+
+
+.upload-area p {
+  margin:
+    8px 0 0;
+
+  color:
+    #999;
+
+  font-size:
+    13px;
+}
+
+
+.uploaded-title {
+  margin:
+    18px 0;
+
+  font-size:
+    18px;
+}
+
+
+.analysis-status {
+  color:
+    #ddd;
+}
+
+
+/* =====================================================
+   UPLOAD GRID
+===================================================== */
+
+.upload-grid {
+  display:
+    flex;
+
+  flex-wrap:
+    wrap;
+
+  gap:
+    25px;
+}
+
+
+.uploaded-photo-card {
+  width:
+    220px;
+}
+
+
+.uploaded-photo-card > img {
+  width:
+    220px;
+
+  height:
+    250px;
+
+  display:
+    block;
+
+  object-fit:
+    cover;
+
+  border-radius:
+    9px;
+}
+
+
+.uploaded-photo-card h3 {
+  margin:
+    10px 0 7px;
+
+  font-size:
+    15px;
+}
+
+
+.analysis-copy {
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  gap:
+    5px;
+
+  font-size:
+    14px;
+}
+
+
+.famous-label {
+  color:
+    #8ee58b;
+}
+
+
+.delete-button {
+  margin-top:
+    14px;
+
+  padding:
+    0;
+
+  border:
+    none;
+
+  background:
+    transparent;
+
+  color:
+    white;
+
+  cursor:
+    pointer;
+
+  font-size:
+    15px;
+}
+
+
+.create-album-button {
+  margin-top:
+    38px;
+
+  padding:
+    12px 25px;
+
+  border:
+    1px solid #555;
+
+  border-radius:
+    7px;
+
+  background:
+    #17191d;
+
+  color:
+    white;
+
+  font-size:
+    15px;
+
+  cursor:
+    pointer;
+}
+
+
+.create-album-button:disabled {
+  opacity:
+    0.45;
+
+  cursor:
+    not-allowed;
+}
+
+
+/* =====================================================
+   DIGITAL ALBUM SECTION
+===================================================== */
+
+.digital-album-section {
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  align-items:
+    center;
+
+  padding-bottom:
+    70px;
+}
+
+
+.album-book-header {
+  margin-bottom:
+    18px;
+
+  text-align:
+    center;
+}
+
+
+.album-book-header > span {
+  color:
+    #ab9075;
+
+  font-size:
+    11px;
+
+  letter-spacing:
+    0.25em;
+}
+
+
+.album-book-header h1 {
+  margin:
+    8px 0;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      30px,
+      5vw,
+      48px
+    );
+
+  font-weight:
+    500;
+}
+
+
+.album-book-header p {
+  margin:
+    0;
+
+  color:
+    #a7abb1;
+
+  font-size:
+    14px;
+}
+
+
+/* =====================================================
+   BOOK STAGE
+===================================================== */
+
+.book-stage {
+  width:
+    min(
+      1120px,
+      96vw
+    );
+
+  min-height:
+    680px;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  perspective:
+    2500px;
+
+  overflow:
+    visible;
+}
+
+
+.feag-flipbook {
+  margin:
+    auto;
+
+  filter:
+    drop-shadow(
+      0 34px 40px
+      rgba(
+        0,
+        0,
+        0,
+        0.55
+      )
+    );
+}
+
+
+.flip-page {
+  overflow:
+    hidden;
+}
+
+
+/* =====================================================
+   BOOK COVER
+===================================================== */
+
+.book-cover-page,
+.back-cover-page {
+  background:
+    #2c2018;
+}
+
+
+.front-cover {
+  width:
+    100%;
+
+  height:
+    100%;
+
+  position:
+    relative;
+
+  overflow:
+    hidden;
+
+  border:
+    none;
+
+  padding:
+    0;
+
+  background:
+    #30231a;
+
+  color:
+    white;
+
+  cursor:
+    pointer;
+
+  text-align:
+    center;
+}
+
+
+.cover-background-image {
+  position:
+    absolute;
+
+  inset:
+    0;
+
+  width:
+    100%;
+
+  height:
+    100%;
+
+  object-fit:
+    cover;
+
+  transform:
+    scale(1.04);
+
+  filter:
+    brightness(0.55)
+    saturate(0.72);
+
+  transition:
+    400ms ease;
+}
+
+
+.front-cover:hover
+.cover-background-image {
+  transform:
+    scale(1.07);
+
+  filter:
+    brightness(0.62)
+    saturate(0.82);
+}
+
+
+.cover-overlay {
+  position:
+    absolute;
+
+  inset:
+    0;
+
+  background:
+
+    linear-gradient(
+      135deg,
+      rgba(
+        23,
+        14,
+        9,
+        0.75
+      ),
+      rgba(
+        87,
+        53,
+        31,
+        0.32
+      ),
+      rgba(
+        14,
+        10,
+        8,
+        0.83
+      )
+    );
+}
+
+
+.book-cover-spine {
+  position:
+    absolute;
+
+  left:
+    0;
+
+  top:
+    0;
+
+  bottom:
+    0;
+
+  width:
+    30px;
+
+  z-index:
+    3;
+
+  background:
+
+    linear-gradient(
+      90deg,
+      rgba(
+        0,
+        0,
+        0,
+        0.7
+      ),
+      rgba(
+        255,
+        255,
+        255,
+        0.08
+      ),
+      rgba(
+        0,
+        0,
+        0,
+        0.35
+      )
+    );
+
+  box-shadow:
+
+    inset
+    -2px
+    0
+    5px
+    rgba(
+      255,
+      255,
+      255,
+      0.12
+    );
+}
+
+
+.cover-border {
+  position:
+    absolute;
+
+  inset:
+    52px 46px;
+
+  z-index:
+    4;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  border:
+
+    1px solid
+    rgba(
+      255,
+      245,
+      224,
+      0.52
+    );
+
+  box-shadow:
+
+    inset
+    0
+    0
+    0
+    7px
+    rgba(
+      255,
+      255,
+      255,
+      0.02
+    );
+}
+
+
+.cover-small-text {
+  margin-bottom:
+    20px;
+
+  font-size:
+    10px;
+
+  letter-spacing:
+    0.36em;
+
+  opacity:
+    0.8;
+}
+
+
+.cover-border h2 {
+  margin:
+    0;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    clamp(
+      39px,
+      5vw,
+      62px
+    );
+
+  font-weight:
+    500;
+
+  text-shadow:
+
+    0
+    5px
+    18px
+    rgba(
+      0,
+      0,
+      0,
+      0.48
+    );
+}
+
+
+.cover-divider {
+  width:
+    85px;
+
+  height:
+    1px;
+
+  margin:
+    28px 0;
+
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.65
+    );
+}
+
+
+.cover-border p {
+  width:
+    min(
+      300px,
+      80%
+    );
+
+  margin:
+    0;
+
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+
+  font-size:
+    15px;
+
+  line-height:
+    1.7;
+}
+
+
+.cover-border small {
+  margin-top:
+    28px;
+
+  font-size:
+    10px;
+
+  letter-spacing:
+    0.2em;
+
+  text-transform:
+    uppercase;
+
+  opacity:
+    0.7;
+}
+
+
+.cover-open-hint {
+  position:
+    absolute;
+
+  left:
+    0;
+
+  right:
+    0;
+
+  bottom:
+    25px;
+
+  z-index:
+    5;
+
+  font-size:
+    9px;
+
+  letter-spacing:
+    0.3em;
+
+  opacity:
+    0.65;
+}
+
+
+/* =====================================================
+   PAPER
+===================================================== */
+
+.paper-page {
+  position:
+    relative;
+
+  color:
+    #342e28;
+
+  background:
+
+    linear-gradient(
+      135deg,
+      #fcf9f3,
+      #f0e9df
+    );
+
+  box-shadow:
+
+    inset
+    0
+    0
+    35px
+    rgba(
+      81,
+      63,
+      44,
+      0.08
+    );
+}
+
+
+.paper-page::before {
+  content:
+    "";
+
+  position:
+    absolute;
+
+  inset:
+    0;
+
+  pointer-events:
+    none;
+
+  opacity:
+    0.55;
+
+  background:
+
+    radial-gradient(
+      circle
+      at 20% 20%,
+      rgba(
+        255,
+        255,
+        255,
+        0.95
+      ),
+      transparent 42%
+    );
+}
+
+
+.physical-page {
+  width:
+    100%;
+
+  height:
+    100%;
+
+  position:
+    relative;
+
+  z-index:
+    2;
+}
+
+
+.physical-page-number {
+  position:
+    absolute;
+
+  right:
+    18px;
+
+  bottom:
+    12px;
+
+  color:
+    #9b8b7a;
+
+  font-family:
+    Georgia,
+    serif;
+
+  font-size:
+    10px;
+}
+
+
+/* =====================================================
+   TITLE PAGE
+===================================================== */
+
+.title-page,
+.ending-page {
+  width:
+    100%;
+
+  height:
+    100%;
+
+  position:
+    relative;
+
+  z-index:
+    2;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  padding:
+    50px;
+
+  text-align:
+    center;
+}
+
+
+.title-page > span,
+.ending-page > span {
+  color:
+    #9a816a;
+
+  font-size:
+    10px;
+
+  letter-spacing:
+    0.38em;
+}
+
+
+.title-page h2,
+.ending-page h2 {
+  margin:
+    18px 0;
+
+  font-family:
+    Georgia,
+    serif;
+
+  font-size:
+    clamp(
+      36px,
+      4vw,
+      56px
+    );
+
+  font-weight:
+    500;
+}
+
+
+.title-divider {
+  width:
+    70px;
+
+  height:
+    1px;
+
+  margin:
+    5px 0 22px;
+
+  background:
+    #bca994;
+}
+
+
+.title-page p,
+.ending-page p {
+  max-width:
+    280px;
+
+  color:
+    #776a5e;
+
+  font-family:
+    Georgia,
+    serif;
+
+  line-height:
+    1.7;
+}
+
+
+/* =====================================================
+   PHOTO FRAME
+===================================================== */
+
+.album-photo-frame {
+  width:
+    100%;
+
+  height:
+    100%;
+
+  min-width:
+    0;
+
+  min-height:
+    0;
+
+  position:
+    relative;
+
+  overflow:
+    hidden;
+
+  border:
+    7px solid white;
+
+  background:
+    #dcd2c4;
+
+  box-shadow:
+
+    0
+    10px
+    24px
+    rgba(
+      65,
+      47,
+      31,
+      0.2
+    );
+}
+
+
+.album-photo-background {
+  position:
+    absolute;
+
+  inset:
+    -12%;
+
+  width:
+    124%;
+
+  height:
+    124%;
+
+  object-fit:
+    cover;
+
+  opacity:
+    0.4;
+
+  filter:
+    blur(23px)
+    brightness(0.82);
+
+  transform:
+    scale(1.08);
+}
+
+
+.album-photo-main {
+  position:
+    relative;
+
+  z-index:
+    2;
+
+  width:
+    100%;
+
+  height:
+    100%;
+
+  display:
+    block;
+
+  object-fit:
+    contain;
+}
+
+
+/* =====================================================
+   PAGE TEMPLATE BASE
+===================================================== */
+
+.template-page {
+  width:
+    100%;
+
+  height:
+    100%;
+
+  padding:
+    28px;
+
+  position:
+    relative;
+
+  z-index:
+    2;
+}
+
+
+/* =====================================================
+   HERO TEMPLATE
+===================================================== */
+
+.template-hero {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+}
+
+
+.hero-photo {
+  width:
+    92%;
+
+  height:
+    91%;
+
+  transform:
+    rotate(
+      -0.4deg
+    );
+}
+
+
+/* =====================================================
+   TWO PHOTO TEMPLATE
+===================================================== */
+
+.template-two {
+  display:
+    grid;
+
+  grid-template-rows:
+    1fr 1fr;
+
+  gap:
+    24px;
+}
+
+
+.two-photo-one {
+  transform:
+    rotate(
+      -0.8deg
+    );
+}
+
+
+.two-photo-two {
+  transform:
+    rotate(
+      0.8deg
+    );
+}
+
+
+/* =====================================================
+   THREE PHOTO TEMPLATE
+===================================================== */
+
+.template-three {
+  display:
+    grid;
+
+  grid-template-columns:
+    1.18fr
+    0.84fr;
+
+  grid-template-rows:
+    1fr
+    1fr;
+
+  gap:
+    19px;
+}
+
+
+.three-photo-main {
+  grid-row:
+    1 / 3;
+
+  transform:
+    rotate(
+      -0.6deg
+    );
+}
+
+
+.three-photo-top {
+  transform:
+    rotate(
+      1deg
+    );
+}
+
+
+.three-photo-bottom {
+  transform:
+    rotate(
+      -0.8deg
+    );
+}
+
+
+/* =====================================================
+   FOUR PHOTO TEMPLATE
+===================================================== */
+
+.template-four {
+  display:
+    grid;
+
+  grid-template-columns:
+    1fr 1fr;
+
+  grid-template-rows:
+    1fr 1fr;
+
+  gap:
+    17px;
+}
+
+
+/* =====================================================
+   BACK COVER
+===================================================== */
+
+.back-cover {
+  width:
+    100%;
+
+  height:
+    100%;
+
+  display:
+    grid;
+
+  place-items:
+    center;
+
+  background:
+
+    linear-gradient(
+      135deg,
+      #2e2118,
+      #17100c
+    );
+}
+
+
+.back-cover-logo {
+  width:
+    95px;
+
+  height:
+    95px;
+
+  display:
+    grid;
+
+  place-items:
+    center;
+
+  border:
+
+    1px solid
+    rgba(
+      255,
+      255,
+      255,
+      0.35
+    );
+
+  border-radius:
+    50%;
+
+  color:
+    rgba(
+      255,
+      255,
+      255,
+      0.8
+    );
+
+  font-family:
+    Georgia,
+    serif;
+
+  letter-spacing:
+    0.15em;
+}
+
+
+/* =====================================================
+   CONTROLS
+===================================================== */
+
+.book-controls,
+.secondary-controls {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  flex-wrap:
+    wrap;
+
+  gap:
+    18px;
+}
+
+
+.book-controls {
+  margin-top:
+    23px;
+}
+
+
+.secondary-controls {
+  margin-top:
+    14px;
+}
+
+
+.book-controls button,
+.secondary-controls button {
+  padding:
+    10px 18px;
+
+  min-width:
+    120px;
+
+  border:
+    1px solid #50545c;
+
+  border-radius:
+    7px;
+
+  background:
+    #15171a;
+
+  color:
+    white;
+
+  cursor:
+    pointer;
+
+  transition:
+    180ms ease;
+}
+
+
+.book-controls button:hover,
+.secondary-controls button:hover {
+  background:
+    #22252a;
+}
+
+
+.book-controls span {
+  min-width:
+    250px;
+
+  color:
+    #abb0b7;
+
+  font-size:
+    13px;
+
+  text-align:
+    center;
+}
+
+
+/* =====================================================
+   RESPONSIVE
+===================================================== */
+
+@media (
+  max-width: 760px
+) {
+
+  .album-app {
+    padding:
+      22px 14px;
+  }
+
+
+  .book-stage {
+    min-height:
+      540px;
+  }
+
+
+  .template-page {
+    padding:
+      16px;
+  }
+
+
+  .template-two {
+    gap:
+      13px;
+  }
+
+
+  .template-three {
+    gap:
+      11px;
+  }
+
+
+  .template-four {
+    gap:
+      10px;
+  }
+
+
+  .album-photo-frame {
+    border-width:
+      4px;
+  }
+
+
+  .cover-border {
+    inset:
+      35px 27px;
+  }
+
+
+  .book-controls span {
+    width:
+      100%;
+
+    order:
+      -1;
+  }
+
+}
+/* =====================================================
+   DYNAMIC PHOTO LAYOUT ENGINE
+
+   Album pages are no longer tied to hero/two/three/four
+   templates. page.tsx calculates each frame from the real
+   image aspect ratio and places it using percentages.
+===================================================== */
+
+.dynamic-template-page {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.dynamic-photo-slot {
+  position: absolute;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  transition:
+    left 220ms ease,
+    top 220ms ease,
+    width 220ms ease,
+    height 220ms ease;
+}
+
+/* The slot dimensions are calculated from the real image aspect ratio.
+   Keeping the border inside the slot prevents the border from changing
+   the final frame ratio and creating visible empty bars. */
+.dynamic-photo-slot .album-photo-frame {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dynamic-photo-slot .album-photo-main {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+/* Very small visual differences keep the automatically generated
+   pages feeling like a designed physical album rather than a grid. */
+.dynamic-photo-slot:nth-child(odd) {
+  transform: rotate(-0.25deg);
+}
+
+.dynamic-photo-slot:nth-child(even) {
+  transform: rotate(0.25deg);
+}
+
+.dynamic-landscape .album-photo-frame {
+  border-width: 6px;
+}
+
+.dynamic-portrait .album-photo-frame,
+.dynamic-square .album-photo-frame {
+  border-width: 7px;
+}
+
+@media (max-width: 760px) {
+  .dynamic-photo-slot .album-photo-frame {
+    border-width: 4px;
+  }
+}
+
+
+/* =====================================================
+   PHOTO EDITOR – WORKING LIVE CONTROLS
+===================================================== */
+
+.photo-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 6, 8, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.photo-editor-modal {
+  width: min(1180px, 96vw);
+  max-height: min(820px, 92vh);
+  overflow: auto;
+  background: #171a20;
+  color: #f4f4f4;
+  border: 1px solid #303641;
+  border-radius: 16px;
+  box-shadow: 0 30px 90px rgba(0,0,0,0.55);
+}
+
+.photo-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 26px;
+  border-bottom: 1px solid #2d323b;
+}
+
+.photo-editor-header span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #8fa2b9;
+}
+
+.photo-editor-header h2 {
+  margin: 5px 0 0;
+  font-size: 22px;
+}
+
+.editor-close-button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #3a414d;
+  border-radius: 50%;
+  background: transparent;
+  color: white;
+  font-size: 25px;
+  cursor: pointer;
+}
+
+.photo-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.75fr);
+  min-height: 580px;
+}
+
+.editor-preview-panel {
+  padding: 24px;
+  min-width: 0;
+  background: #0f1115;
+}
+
+.editor-crop-area {
+  position: relative;
+  width: 100%;
+  height: min(62vh, 560px);
+  min-height: 380px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #090a0c;
+}
+
+.editor-crop-area .reactEasyCrop_Container,
+.editor-crop-area .reactEasyCrop_Image,
+.editor-crop-area .reactEasyCrop_Video {
+  transition: filter 120ms ease;
+}
+
+.editor-controls-panel {
+  padding: 26px;
+  border-left: 1px solid #2d323b;
+  background: #1b1f26;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.editor-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editor-control-group label {
+  color: #d5d9df;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.editor-control-group input[type="range"] {
+  width: 100%;
+  accent-color: #2e8df0;
+  cursor: pointer;
+}
+
+.filter-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 9px;
+}
+
+.filter-buttons button {
+  padding: 10px 12px;
+  border: 1px solid #3a414d;
+  border-radius: 8px;
+  background: #232832;
+  color: #e9edf2;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.filter-buttons button.active-filter {
+  border-color: #3d9cff;
+  background: rgba(46, 141, 240, 0.2);
+}
+
+.face-status,
+.editor-ai-result {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #2e3540;
+  border-radius: 8px;
+  background: #181c22;
+  color: #c9d1dc;
+}
+
+.editor-ai-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 850px) {
+  .photo-editor-backdrop {
+    padding: 10px;
+  }
+
+  .photo-editor-modal {
+    width: 100%;
+    max-height: 96vh;
+  }
+
+  .photo-editor-body {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-controls-panel {
+    border-left: none;
+    border-top: 1px solid #2d323b;
+  }
+
+  .editor-crop-area {
+    height: 52vh;
+    min-height: 320px;
+  }
 }
