@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { InferenceClient } from "@huggingface/inference";
+import { pipeline } from "@huggingface/transformers";
 
 // =====================================================
 // TYPES
@@ -37,31 +37,26 @@ type AlbumImage = {
 // HUGGING FACE CONFIGURATION
 // =====================================================
 
-const HF_TOKEN = process.env.HF_TOKEN;
-
 const CLIP_MODEL =
-  "openai/clip-vit-large-patch14-336";
+  "Xenova/clip-vit-large-patch14-336";
 
-// =====================================================
-// IMPORTANT
-//
-// The Hugging Face token is kept on the server.
-// It is NEVER exposed to the browser.
-// =====================================================
+type ClipClassifier = Awaited<ReturnType<typeof pipeline>>;
 
-if (!HF_TOKEN) {
-  console.warn(
-    "HF_TOKEN is not configured. Album AI analysis will fail until it is added to .env.local."
-  );
+let clipClassifierPromise: Promise<ClipClassifier> | null = null;
+
+function getClipClassifier(): Promise<ClipClassifier> {
+  if (!clipClassifierPromise) {
+    console.log(`Loading local CLIP model: ${CLIP_MODEL}`);
+
+    clipClassifierPromise = pipeline(
+      "zero-shot-image-classification",
+      CLIP_MODEL,
+      { dtype: "q4" }
+    );
+  }
+
+  return clipClassifierPromise;
 }
-
-// =====================================================
-// HUGGING FACE CLIENT
-// =====================================================
-
-const hf = HF_TOKEN
-  ? new InferenceClient(HF_TOKEN)
-  : null;
 
 // =====================================================
 // LANDMARK CANDIDATES
@@ -149,24 +144,6 @@ const GENERAL_SCENES = [
 ];
 
 // =====================================================
-// IMAGE → BLOB
-// =====================================================
-
-async function dataUrlToBlob(
-  dataUrl: string
-): Promise<Blob> {
-  const response = await fetch(dataUrl);
-
-  if (!response.ok) {
-    throw new Error(
-      `Could not load image data: ${response.status}`
-    );
-  }
-
-  return response.blob();
-}
-
-// =====================================================
 // SORT DETECTIONS
 // =====================================================
 
@@ -195,27 +172,14 @@ function cleanLabel(label: string): string {
 // =====================================================
 
 async function detectFamousLandmark(
-  imageBlob: Blob
+  imageDataUrl: string
 ): Promise<Detection[]> {
-  if (!hf) {
-    throw new Error(
-      "HF_TOKEN is missing."
-    );
-  }
+  const classifier = await getClipClassifier();
 
-  const result =
-    await hf.zeroShotImageClassification({
-      model: CLIP_MODEL,
-
-      inputs: {
-        image: imageBlob,
-      },
-
-      parameters: {
-        candidate_labels:
-          FAMOUS_LANDMARKS,
-      },
-    });
+  const result = await classifier(
+    imageDataUrl,
+    FAMOUS_LANDMARKS
+  );
 
   return sortDetections(
     result.map((item) => ({
@@ -230,27 +194,14 @@ async function detectFamousLandmark(
 // =====================================================
 
 async function detectGeneralScene(
-  imageBlob: Blob
+  imageDataUrl: string
 ): Promise<Detection[]> {
-  if (!hf) {
-    throw new Error(
-      "HF_TOKEN is missing."
-    );
-  }
+  const classifier = await getClipClassifier();
 
-  const result =
-    await hf.zeroShotImageClassification({
-      model: CLIP_MODEL,
-
-      inputs: {
-        image: imageBlob,
-      },
-
-      parameters: {
-        candidate_labels:
-          GENERAL_SCENES,
-      },
-    });
+  const result = await classifier(
+    imageDataUrl,
+    GENERAL_SCENES
+  );
 
   return sortDetections(
     result.map((item) => ({
@@ -405,10 +356,7 @@ async function analyzeImage(
     // CONVERT DATA URL → BLOB
     // =================================================
 
-    const imageBlob =
-      await dataUrlToBlob(
-        image.data
-      );
+
 
     // =================================================
     // RUN BOTH ANALYSES
@@ -422,11 +370,11 @@ async function analyzeImage(
       sceneDetections,
     ] = await Promise.all([
       detectFamousLandmark(
-        imageBlob
+        image.data
       ),
 
       detectGeneralScene(
-        imageBlob
+        image.data
       ),
     ]);
 
@@ -612,25 +560,9 @@ export async function POST(
 ) {
   try {
     // =================================================
-    // CHECK HUGGING FACE TOKEN
-    // =================================================
-
-    if (!HF_TOKEN || !hf) {
-      return NextResponse.json(
-        {
-          success: false,
-
-          error:
-            "Hugging Face token is missing. Add HF_TOKEN to .env.local.",
-        },
-        {
-          status: 500,
-        }
-      );
-    }
-
-    // =================================================
     // READ REQUEST
+    // =================================================
+
     // =================================================
 
     const body =
