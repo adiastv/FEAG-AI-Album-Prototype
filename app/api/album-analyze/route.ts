@@ -343,7 +343,8 @@ function determineMonumentLike(
   const monumentLabels = [
     "a historical monument",
     "a famous landmark",
-    "a temple",
+    "a public place",
+    "a temple", 
     "a mosque",
     "a church",
     "a palace",
