@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { pipeline } from "@huggingface/transformers";
 
+// Transformers.js runs server-side for this API route.
+export const runtime = "nodejs";
+
 // =====================================================
 // TYPES
 // =====================================================
@@ -38,7 +41,7 @@ type AlbumImage = {
 // =====================================================
 
 const CLIP_MODEL =
-  "Xenova/clip-vit-large-patch14-336";
+  "Xenova/clip-vit-large-patch14";
 
 type ClipClassifier = Awaited<ReturnType<typeof pipeline>>;
 
@@ -50,8 +53,7 @@ function getClipClassifier(): Promise<ClipClassifier> {
 
     clipClassifierPromise = pipeline(
       "zero-shot-image-classification",
-      CLIP_MODEL,
-      { dtype: "q4" }
+      CLIP_MODEL
     );
   }
 

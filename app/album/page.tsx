@@ -5229,7 +5229,7 @@ export default function Home() {
             padding-right: 14px;
           }
 
-          .prototype-title {
+          .prototype-title {`
             font-size: clamp(28px, 8vw, 42px);
             line-height: 1.05;
             text-align: center;
@@ -6117,7 +6117,7 @@ export default function Home() {
                 <div className="ai-album-brand">
                   <div className="ai-album-brand-mark" aria-hidden="true">▧</div>
                   <div className="ai-album-brand-copy">
-                    <h1>Album Maker</h1>
+                    <h1>Your Digital Album</h1>
                     <p>Create Beautiful Photo Albums</p>
                   </div>
                 </div>

@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.28",
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "^4.3.0",
     "@mediapipe/face_detection": "^0.4.1646425229",
     "@openpageflip/core": "^0.2.4",
     "@openpageflip/react": "^0.1.3",
