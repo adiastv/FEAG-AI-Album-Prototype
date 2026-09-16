@@ -98,6 +98,12 @@ export default function Home() {
   const [albumCreated, setAlbumCreated] =
     useState(false);
 
+  const [activeAlbumTool, setActiveAlbumTool] =
+    useState<"frames" | "backgrounds" | "stickers" | "text" | "borders" | "settings">("frames");
+
+  const [currentBookPage, setCurrentBookPage] =
+    useState(0);
+
   const [albumPages, setAlbumPages] =
     useState<AlbumPage[]>([]);
 
@@ -517,6 +523,8 @@ export default function Home() {
 
   const resetAlbum = () => {
     setAlbumCreated(false);
+    setActiveAlbumTool("frames");
+    setCurrentBookPage(0);
 
     setAlbumPages([]);
 
@@ -2143,6 +2151,7 @@ export default function Home() {
     setBookOpened(
       true
     );
+    setCurrentBookPage(1);
 
     // Give the book a moment before flipping
     // the hard front cover.
@@ -2160,12 +2169,20 @@ export default function Home() {
 
     bookRef.current
       ?.flipNext();
+
+    setCurrentBookPage((page) =>
+      Math.min(page + 1, albumPages.length + 3)
+    );
   };
 
   const previousPage =
     () => {
       bookRef.current
         ?.flipPrev();
+
+      setCurrentBookPage((page) =>
+        Math.max(0, page - 1)
+      );
     };
 
   const closeAlbum = () => {
@@ -4336,6 +4353,118 @@ export default function Home() {
         =============================================== */
 
         /* ===============================================
+           REFERENCE-INSPIRED AI ALBUM EDITOR
+        =============================================== */
+        .ai-album-editor-shell {
+          width: 100%;
+          background: #1c1f22;
+          color: #f4f1ec;
+          border-radius: 18px;
+          overflow: hidden;
+          box-shadow: 0 20px 55px rgba(0,0,0,0.28);
+        }
+        .ai-album-topbar {
+          min-height: 94px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 24px;
+          padding: 12px 24px;
+          background: linear-gradient(180deg,#202428,#1b1e21);
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+          box-sizing: border-box;
+        }
+        .ai-album-brand { display:flex; align-items:center; gap:14px; min-width:0; }
+        .ai-album-brand-mark {
+          width:54px; height:54px; flex:0 0 54px; display:grid; place-items:center;
+          border:2px solid #e9e3d9; border-radius:8px; color:#f7f1e8; font-size:27px;
+          background:linear-gradient(135deg,#30343a,#17191c); box-shadow:5px 5px 0 rgba(255,255,255,0.12);
+        }
+        .ai-album-brand-copy h1 { margin:0; color:#f8f5ef; font-size:27px; line-height:1.05; font-weight:700; }
+        .ai-album-brand-copy p { margin:5px 0 0; color:#9ea4ab; font-size:13px; }
+        .ai-album-top-actions { display:flex; align-items:stretch; height:70px; }
+        .ai-album-top-action {
+          min-width:112px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+          padding:5px 16px; border:0; border-left:1px solid rgba(255,255,255,0.08); background:transparent;
+          color:#f3f0eb; cursor:pointer;
+        }
+        .ai-album-top-action:hover,.ai-album-top-action.active { background:rgba(255,255,255,0.055); color:#fff; }
+        .ai-album-top-action-icon { font-size:27px; line-height:1; }
+        .ai-album-top-action-label { font-size:12px; white-space:nowrap; }
+        .ai-album-editor-body { display:grid; grid-template-columns:220px minmax(0,1fr); min-height:690px; }
+        .ai-album-tool-rail { background:#22262a; border-right:1px solid rgba(255,255,255,0.07); padding:13px 10px; box-sizing:border-box; }
+        .ai-album-tool-item {
+          width:100%; min-height:52px; display:flex; align-items:center; gap:13px; padding:9px 12px; margin:0 0 5px;
+          border:0; border-radius:8px; background:transparent; color:#f0ede7; text-align:left; font-size:14px; cursor:pointer;
+        }
+        .ai-album-tool-item:hover { background:rgba(255,255,255,0.055); }
+        .ai-album-tool-item.active { background:#34383d; box-shadow:inset 3px 0 0 #e2bd8d; }
+        .ai-album-tool-icon { width:24px; flex:0 0 24px; text-align:center; font-size:20px; }
+        .ai-album-tool-panel { margin-top:17px; padding:12px; border-top:1px solid rgba(255,255,255,0.07); }
+        .ai-album-tool-panel-kicker { display:block; margin-bottom:6px; color:#9ba1a8; font-size:9px; font-weight:700; letter-spacing:.16em; }
+        .ai-album-tool-panel h3 { margin:0 0 5px; color:#f3eee6; font-size:14px; }
+        .ai-album-tool-panel p { margin:0 0 10px; color:#92989f; font-size:10px; line-height:1.45; }
+        .ai-album-frame-options { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+        .ai-album-frame-option { min-width:0; padding:5px; border:1px solid #41464c; border-radius:6px; background:#171a1d; color:#ddd8d0; cursor:pointer; text-align:left; }
+        .ai-album-frame-option.active { border-color:#d8b28a; background:#302820; }
+        .ai-album-frame-mini { height:45px; display:grid; place-items:center; gap:3px; padding:4px; border-radius:4px; background:linear-gradient(145deg,#f3eee3,#d9d1c3); }
+        .ai-album-frame-mini span { display:block; width:70%; height:75%; border:1px solid #a89d8d; background:rgba(255,255,255,.35); }
+        .ai-album-frame-mini.two { grid-template-columns:1fr 1fr; }
+        .ai-album-frame-mini.three { grid-template-columns:repeat(3,1fr); }
+        .ai-album-frame-mini.four { grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(2,1fr); }
+        .ai-album-frame-option-label { display:block; margin-top:5px; font-size:9px; color:#b8b2aa; }
+        .ai-album-tool-card { padding:10px; margin-top:8px; border:1px solid #3b4046; border-radius:8px; background:#181b1f; color:#aeb3ba; font-size:10px; line-height:1.45; }
+        .ai-album-canvas-area { min-width:0; display:flex; flex-direction:column; background:radial-gradient(circle at 50% 35%,rgba(255,255,255,.045),transparent 46%),#24272a; overflow:hidden; }
+        .ai-album-book-toolbar { min-height:42px; display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:7px 14px; color:#9da3a9; font-size:10px; box-sizing:border-box; }
+        .ai-album-book-title { margin-right:auto; min-width:0; color:#ded9d1; font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .ai-album-canvas-area .book-stage { flex:1; width:100%; display:flex; align-items:center; justify-content:center; padding:0 18px 18px; box-sizing:border-box; }
+        .ai-album-page-strip { display:flex; align-items:center; gap:10px; min-height:110px; padding:13px 15px; background:#f2f0ed; border-top:1px solid rgba(0,0,0,.1); box-sizing:border-box; overflow-x:auto; }
+        .ai-album-page-thumb { position:relative; flex:0 0 116px; height:78px; padding:0; border:2px solid transparent; border-radius:5px; background:#ddd8d0; box-shadow:0 2px 7px rgba(0,0,0,.12); cursor:pointer; overflow:hidden; }
+        .ai-album-page-thumb.active { border-color:#0d9bd7; box-shadow:0 0 0 1px rgba(13,155,215,.12); }
+        .ai-album-page-thumb-label { position:absolute; left:4px; bottom:3px; padding:2px 4px; border-radius:3px; background:rgba(0,0,0,.56); color:white; font-size:7px; line-height:1; }
+        .ai-album-page-thumb-cover { width:100%; height:100%; display:grid; place-items:center; padding:8px; box-sizing:border-box; background:linear-gradient(145deg,#40372f,#1f1d1a); color:#eee7dc; font-size:9px; font-weight:700; text-align:center; }
+        .ai-album-page-thumb-title { width:100%; height:100%; display:grid; place-items:center; padding:8px; box-sizing:border-box; background:#f3efe7; color:#645d55; text-align:center; font-family:Georgia,serif; font-size:9px; }
+        .ai-album-page-thumb-grid { position:absolute; inset:6px; display:grid; gap:3px; }
+        .ai-album-page-thumb-photo { min-width:0; min-height:0; overflow:hidden; border:1px solid rgba(80,70,58,.25); background:#f8f6f2; }
+        .ai-album-page-thumb-photo img { width:100%; height:100%; display:block; object-fit:cover; }
+        .ai-album-page-strip-arrow { flex:0 0 30px; width:30px; height:30px; border:0; background:transparent; color:#555b60; font-size:25px; cursor:pointer; }
+        .album-name-editor-input { width:100%; min-height:36px; padding:8px 9px; box-sizing:border-box; border:1px solid #454a50; border-radius:7px; background:#171a1d; color:#f4f1ec; outline:none; font-size:11px; }
+        .album-name-editor-input:focus { border-color:#d8b28a; }
+        .ai-album-tool-panel .album-navigation-panel.button { width:100%; min-height:34px; margin-top:7px; padding:7px 8px; border:1px solid #41464c; border-radius:7px; background:#171a1d; color:#e8e4dd; cursor:pointer; font-size:10px; }
+        .ai-album-tool-panel .album-navigation-panel.button:hover { background:#272b30; }
+        @media (max-width:900px) {
+          .ai-album-topbar { padding:10px 16px; }
+          .ai-album-top-action { min-width:88px; padding-left:10px; padding-right:10px; }
+          .ai-album-editor-body { grid-template-columns:190px minmax(0,1fr); }
+        }
+        @media (max-width:700px) {
+          .ai-album-editor-shell { border-radius:12px; }
+          .ai-album-topbar { min-height:74px; gap:10px; }
+          .ai-album-brand-mark { width:44px; height:44px; flex-basis:44px; font-size:21px; }
+          .ai-album-brand-copy h1 { font-size:19px; }
+          .ai-album-brand-copy p { font-size:10px; margin-top:3px; }
+          .ai-album-top-actions { height:58px; flex:0 0 auto; }
+          .ai-album-top-action { min-width:52px; padding:4px 7px; }
+          .ai-album-top-action-icon { font-size:21px; }
+          .ai-album-top-action-label { display:none; }
+          .ai-album-editor-body { display:flex; flex-direction:column; min-height:0; }
+          .ai-album-tool-rail { order:2; border-right:0; border-top:1px solid rgba(255,255,255,.07); padding:8px; }
+          .ai-album-tool-item { display:inline-flex; width:auto; min-width:70px; min-height:48px; margin:0 3px 0 0; padding:6px 9px; flex-direction:column; justify-content:center; gap:2px; text-align:center; }
+          .ai-album-tool-icon { width:auto; font-size:18px; }
+          .ai-album-tool-label { font-size:9px; }
+          .ai-album-tool-panel { margin-top:8px; padding:10px 3px 2px; }
+          .ai-album-canvas-area { order:1; }
+          .ai-album-canvas-area .book-stage { padding:0 6px 8px; }
+          .ai-album-page-strip { min-height:92px; padding:9px 8px; gap:7px; }
+          .ai-album-page-thumb { flex-basis:92px; height:62px; }
+        }
+        @media (max-width:420px) {
+          .ai-album-brand-copy p { display:none; }
+          .ai-album-top-action { min-width:42px; }
+          .ai-album-tool-item { min-width:60px; padding-left:5px; padding-right:5px; }
+        }
+
+        /* ===============================================
            ALBUM EDITOR WORKSPACE
            ------------------------------------------------
            Desktop: tools stay to the LEFT of the book.
@@ -5983,148 +6112,141 @@ export default function Home() {
         {albumCreated && (
           <section className="digital-album-section">
 
-            <header className="album-book-header">
-              <span>
-                FEAG DIGITAL ALBUM
-              </span>
-
-              <h1>
-                {albumName || getThemeLabel(albumTheme)}
-              </h1>
-
-              <p>
-                {getThemeIcon(albumTheme)}{" "}
-                {getThemeLabel(albumTheme)}
-              </p>
-
-              <small className="album-theme-note">
-                Edit the title directly on the front cover.
-              </small>
-            </header>
-
-            <div className="album-editor-workspace">
-
-              {/* =============================================
-                  LEFT-SIDE ALBUM TOOLS
-              ============================================== */}
-
-              <aside className="album-side-panel">
-
-                <div className="album-side-panel-section album-navigation-panel">
-                  <span className="album-side-panel-kicker">
-                    ALBUM
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={previousPage}
-                  >
-                    ← Previous
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={nextPage}
-                  >
-                    Next →
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={closeAlbum}
-                  >
-                    📕 Close Album
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAlbumCreated(false);
-                      setBookOpened(false);
-                      setBookKey(
-                        (previous) =>
-                          previous + 1
-                      );
-                    }}
-                  >
-                    ← Back to Photos
-                  </button>
-
-                  <p className="album-side-help">
-                    {bookOpened
-                      ? "Click a blank area of a page to edit it. Drag photos to swap them."
-                      : "Click the cover to open the album."}
-                  </p>
-                </div>
-
-                <div className="album-side-panel-section">
-                  <span className="album-side-panel-kicker">
-                    PAGE DESIGN
-                  </span>
-
-                  <h3>
-                    {getThemeIcon(albumTheme)}{" "}
-                    {getThemeLabel(albumTheme)}
-                  </h3>
-
-                  <p>
-                    Change the framing composition without changing the theme.
-                  </p>
-
-                  <div className="album-design-buttons">
-                    {[
-                      {
-                        id: "classic",
-                        label: "Classic Dynamic",
-                      },
-                      {
-                        id: "editorial",
-                        label: "Editorial",
-                      },
-                      {
-                        id: "collage",
-                        label: "Creative Collage",
-                      },
-                      {
-                        id: "story",
-                        label: "Story Sequence",
-                      },
-                    ].map((design) => (
-                      <button
-                        key={design.id}
-                        type="button"
-                        className={
-                          albumDesign === design.id
-                            ? "active-design"
-                            : ""
-                        }
-                        onClick={() =>
-                          changeAlbumDesign(
-                            design.id as AlbumDesign
-                          )
-                        }
-                      >
-                        {design.label}
-                      </button>
-                    ))}
+            <div className="ai-album-editor-shell">
+              <header className="ai-album-topbar">
+                <div className="ai-album-brand">
+                  <div className="ai-album-brand-mark" aria-hidden="true">▧</div>
+                  <div className="ai-album-brand-copy">
+                    <h1>Album Maker</h1>
+                    <p>Create Beautiful Photo Albums</p>
                   </div>
                 </div>
-
-                <div className="album-side-panel-tip">
-                  <strong>Quick edit</strong>
-                  <span>
-                    Click any page to open its page editor. You can swap,
-                    add, or reframe photos from there.
-                  </span>
+                <div className="ai-album-top-actions">
+                  <button type="button" className="ai-album-top-action" onClick={() => albumPages[0] && openPageEditor(albumPages[0].id)}>
+                    <span className="ai-album-top-action-icon">⊕</span>
+                    <span className="ai-album-top-action-label">Add Photos</span>
+                  </button>
+                  <button type="button" className={`ai-album-top-action ${activeAlbumTool === "frames" ? "active" : ""}`} onClick={() => setActiveAlbumTool("frames")}>
+                    <span className="ai-album-top-action-icon">▤</span>
+                    <span className="ai-album-top-action-label">Layouts</span>
+                  </button>
+                  <button type="button" className={`ai-album-top-action ${activeAlbumTool === "backgrounds" ? "active" : ""}`} onClick={() => setActiveAlbumTool("backgrounds")}>
+                    <span className="ai-album-top-action-icon">◉</span>
+                    <span className="ai-album-top-action-label">Design</span>
+                  </button>
+                  <button type="button" className={`ai-album-top-action ${activeAlbumTool === "settings" ? "active" : ""}`} onClick={() => setActiveAlbumTool("settings")}>
+                    <span className="ai-album-top-action-icon">⇩</span>
+                    <span className="ai-album-top-action-label">Save / Export</span>
+                  </button>
                 </div>
+              </header>
 
-              </aside>
+              <div className="ai-album-editor-body">
+                <aside className="ai-album-tool-rail">
+                  {[
+                    { id: "frames", icon: "▣", label: "Frames" },
+                    { id: "backgrounds", icon: "▧", label: "Backgrounds" },
+                    { id: "stickers", icon: "☆", label: "Stickers" },
+                    { id: "text", icon: "T", label: "Text" },
+                    { id: "borders", icon: "▢", label: "Borders" },
+                    { id: "settings", icon: "⚙", label: "Settings" },
+                  ].map((tool) => (
+                    <button key={tool.id} type="button" className={`ai-album-tool-item ${activeAlbumTool === tool.id ? "active" : ""}`} onClick={() => setActiveAlbumTool(tool.id as typeof activeAlbumTool)}>
+                      <span className="ai-album-tool-icon">{tool.icon}</span>
+                      <span className="ai-album-tool-label">{tool.label}</span>
+                    </button>
+                  ))}
 
-              {/* =============================================
-                  FLIPBOOK
-              ============================================== */}
+                  <div className="ai-album-tool-panel">
+                    {activeAlbumTool === "frames" && (
+                      <>
+                        <span className="ai-album-tool-panel-kicker">FRAMES</span>
+                        <h3>Page Layouts</h3>
+                        <p>Choose how photographs are framed on the album pages.</p>
+                        <div className="ai-album-frame-options">
+                          {[
+                            { id: "classic", label: "Classic", mini: "one" },
+                            { id: "editorial", label: "Editorial", mini: "two" },
+                            { id: "collage", label: "Collage", mini: "four" },
+                            { id: "story", label: "Story", mini: "three" },
+                          ].map((frame) => (
+                            <button key={frame.id} type="button" className={`ai-album-frame-option ${albumDesign === frame.id ? "active" : ""}`} onClick={() => changeAlbumDesign(frame.id as AlbumDesign)}>
+                              <div className={`ai-album-frame-mini ${frame.mini}`}>
+                                <span />
+                                {frame.mini !== "one" && <span />}
+                                {frame.mini === "four" && <><span /><span /></>}
+                              </div>
+                              <span className="ai-album-frame-option-label">{frame.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
 
-                          <div className="book-stage mobile-book-stage">
+                    {activeAlbumTool === "backgrounds" && (
+                      <>
+                        <span className="ai-album-tool-panel-kicker">BACKGROUNDS</span>
+                        <h3>Album Theme</h3>
+                        <p>Change the decorative background without changing your photographs.</p>
+                        <div className="ai-album-frame-options">
+                          {["classic","travel","birthday","wedding","family","party"].map((theme) => (
+                            <button key={theme} type="button" className={`ai-album-frame-option ${albumTheme === theme ? "active" : ""}`} onClick={() => setAlbumTheme(theme as AlbumTheme)}>
+                              <div className="ai-album-frame-mini"><span /></div>
+                              <span className="ai-album-frame-option-label">{getThemeLabel(theme as AlbumTheme)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {activeAlbumTool === "stickers" && (
+                      <>
+                        <span className="ai-album-tool-panel-kicker">STICKERS</span>
+                        <h3>Decorations</h3>
+                        <p>Theme artwork is already generated automatically for this album.</p>
+                        <div className="ai-album-tool-card">Sticker placement can be added here without disturbing the generated photo frames.</div>
+                      </>
+                    )}
+
+                    {activeAlbumTool === "text" && (
+                      <>
+                        <span className="ai-album-tool-panel-kicker">TEXT</span>
+                        <h3>Album Title</h3>
+                        <p>Edit the title shown on the front cover.</p>
+                        <input type="text" value={albumName} onChange={(event) => setAlbumName(event.target.value.slice(0, 80))} maxLength={80} className="album-name-editor-input" aria-label="Album title" />
+                      </>
+                    )}
+
+                    {activeAlbumTool === "borders" && (
+                      <>
+                        <span className="ai-album-tool-panel-kicker">BORDERS</span>
+                        <h3>Frame Styling</h3>
+                        <p>The generated album keeps its theme-aware frame treatment.</p>
+                        <div className="ai-album-tool-card">Use the small edit icon on each page for page-level framing changes.</div>
+                      </>
+                    )}
+
+                    {activeAlbumTool === "settings" && (
+                      <>
+                        <span className="ai-album-tool-panel-kicker">ALBUM</span>
+                        <h3>Album Controls</h3>
+                        <p>{images.length} photographs · {albumPages.length} generated pages</p>
+                        <button type="button" className="album-navigation-panel button" onClick={previousPage}>← Previous</button>
+                        <button type="button" className="album-navigation-panel button" onClick={nextPage}>Next →</button>
+                        <button type="button" className="album-navigation-panel button" onClick={closeAlbum}>Close Album</button>
+                      </>
+                    )}
+                  </div>
+                </aside>
+
+                <div className="ai-album-canvas-area">
+                  <div className="ai-album-book-toolbar">
+                    <span className="ai-album-book-title">{albumName || getThemeLabel(albumTheme)}</span>
+                    <span>{images.length} photos</span><span>•</span><span>{albumPages.length} pages</span>
+                  </div>
+
+                  <div className="book-stage mobile-book-stage">
+
 
               <FlipBook
                 key={
@@ -6329,9 +6451,44 @@ export default function Home() {
 
               </FlipBook>
 
-            </div>
+                    <div className="ai-album-page-strip">
+                      <button type="button" className="ai-album-page-strip-arrow" onClick={previousPage} aria-label="Previous page">‹</button>
 
+                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === 0 ? "active" : ""}`} onClick={() => { setCurrentBookPage(0); setBookOpened(false); bookRef.current?.turnToPage(0); }} aria-label="Front cover">
+                        <span className="ai-album-page-thumb-cover">{albumName || "Album"}</span>
+                        <span className="ai-album-page-thumb-label">COVER</span>
+                      </button>
 
+                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === 1 ? "active" : ""}`} onClick={() => { setCurrentBookPage(1); setBookOpened(true); bookRef.current?.turnToPage(1); }} aria-label="Title page">
+                        <span className="ai-album-page-thumb-title">{albumName || getThemeLabel(albumTheme)}</span>
+                        <span className="ai-album-page-thumb-label">TITLE</span>
+                      </button>
+
+                      {albumPages.map((page, pageIndex) => {
+                        const bookPageIndex = pageIndex + 2;
+                        const count = page.images.length;
+                        const columns = count >= 3 ? "repeat(3,1fr)" : count === 2 ? "repeat(2,1fr)" : "1fr";
+                        const rows = count >= 4 ? "repeat(2,1fr)" : "1fr";
+                        return (
+                          <button key={`thumb-${page.id}`} type="button" className={`ai-album-page-thumb ${currentBookPage === bookPageIndex ? "active" : ""}`} onClick={() => { setCurrentBookPage(bookPageIndex); setBookOpened(true); bookRef.current?.turnToPage(bookPageIndex); }} aria-label={`Album page ${pageIndex + 1}`}>
+                            <span className="ai-album-page-thumb-grid" style={{ gridTemplateColumns: columns, gridTemplateRows: rows }}>
+                              {page.images.slice(0,4).map((image) => <span key={image.id} className="ai-album-page-thumb-photo"><img src={image.data} alt="" /></span>)}
+                            </span>
+                            <span className="ai-album-page-thumb-label">{pageIndex + 1}</span>
+                          </button>
+                        );
+                      })}
+
+                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === albumPages.length + 2 ? "active" : ""}`} onClick={() => { const endPage = albumPages.length + 2; setCurrentBookPage(endPage); setBookOpened(true); bookRef.current?.turnToPage(endPage); }} aria-label="End page">
+                        <span className="ai-album-page-thumb-title">THE END</span>
+                        <span className="ai-album-page-thumb-label">END</span>
+                      </button>
+
+                      <button type="button" className="ai-album-page-strip-arrow" onClick={nextPage} aria-label="Next page">›</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
           </section>
