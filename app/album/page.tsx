@@ -5229,7 +5229,7 @@ export default function Home() {
             padding-right: 14px;
           }
 
-          .prototype-title {`
+          .prototype-title {
             font-size: clamp(28px, 8vw, 42px);
             line-height: 1.05;
             text-align: center;
