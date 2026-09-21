@@ -146,33 +146,35 @@ async function classifyPhoto(input: AlbumGeneratorInput): Promise<PhotoAnalysis>
 }
 
 function buildGroups(photos: PhotoAnalysis[]): PhotoGroup[] {
-  const map = new Map<string, PhotoAnalysis[]>();
+  if (photos.length === 0) return [];
 
+  // Individual image labels are intentionally not used as page boundaries.
+  // A classifier can call adjacent photos "sightseeing", "people", and
+  // "food", but splitting those into one-photo pages destroys the visual
+  // rhythm of a printed collage. Keep the upload order intact and let the
+  // layout engine build full, balanced pages from the complete story.
+  const eventScores = new Map<EventType, number>();
   for (const photo of photos) {
-    const key = `${photo.event}::${photo.section || "Highlights"}`;
-    const group = map.get(key) ?? [];
-    group.push(photo);
-    map.set(key, group);
+    eventScores.set(
+      photo.event,
+      (eventScores.get(photo.event) ?? 0) + Math.max(photo.eventConfidence, 0.1),
+    );
   }
 
-  return Array.from(map.entries())
-    .map(([key, group], index) => {
-      const [event, section] = key.split("::") as [EventType, string];
-      const confidence =
-        group.reduce((sum, photo) => sum + photo.eventConfidence, 0) /
-        Math.max(group.length, 1);
+  const event =
+    [...eventScores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "other";
+  const confidence =
+    photos.reduce((sum, photo) => sum + photo.eventConfidence, 0) /
+    photos.length;
 
-      return {
-        id: `group-${index + 1}`,
-        name: section,
-        event,
-        photoIds: group.map((photo) => photo.id),
-        confidence,
-        order: index,
-      };
-    })
-    .sort((a, b) => b.confidence - a.confidence)
-    .map((group, index) => ({ ...group, order: index }));
+  return [{
+    id: "group-1",
+    name: "Highlights",
+    event,
+    photoIds: photos.map((photo) => photo.id),
+    confidence,
+    order: 0,
+  }];
 }
 
 function buildPages(groups: PhotoGroup[], photos: PhotoAnalysis[]): AlbumPage[] {
@@ -184,11 +186,13 @@ function buildPages(groups: PhotoGroup[], photos: PhotoAnalysis[]): AlbumPage[] 
       .map((id) => photoById.get(id))
       .filter((photo): photo is PhotoAnalysis => Boolean(photo));
 
-    // Professional pages can use up to eight images. Larger groups are split
-    // into intentional page-sized chunks rather than forcing a four-grid.
+    // Keep a varied but readable page density. Dividing long uploads into
+    // near-even groups prevents a dense nine-photo mosaic followed by a weak
+    // one- or two-photo leftover page (for example, 19 becomes 7 / 6 / 6).
     for (let index = 0; index < groupPhotos.length; ) {
       const remaining = groupPhotos.length - index;
-      const pageCount = Math.min(remaining, remaining >= 8 ? 8 : remaining >= 5 ? remaining : 4);
+      const pagesNeeded = remaining > 9 ? Math.ceil(remaining / 7) : 1;
+      const pageCount = Math.min(9, Math.ceil(remaining / pagesNeeded));
       const pagePhotos = groupPhotos.slice(index, index + pageCount);
 
       const layout = createProfessionalLayout(pagePhotos, group.event, group.name);
@@ -203,7 +207,9 @@ function buildPages(groups: PhotoGroup[], photos: PhotoAnalysis[]): AlbumPage[] 
         photoIds: layout.slots
           .map((slot) => slot.photoId)
           .filter((id): id is string => Boolean(id)),
-        title: index === 0 ? group.name : undefined,
+        // Text is deliberately opt-in in the editor; generated pages remain
+        // image-first until the user adds their own copy.
+        title: undefined,
       });
 
       index += pageCount;
