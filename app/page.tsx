@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- The moderation preview uses user-provided data URLs. */
+
 import { useState } from "react";
 
 interface StoredImage {
@@ -241,7 +243,7 @@ export default function Home() {
           <p>
             {blockedMediaCount} media file
             {blockedMediaCount !== 1 ? "s" : ""} violated
-            {" "}FEAG's portfolio content guidelines.
+            {" "}FEAG&apos;s portfolio content guidelines.
           </p>
         </div>
       )}

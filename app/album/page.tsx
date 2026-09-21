@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- User-provided data URLs are edited directly in the browser. */
+
 import "@openpageflip/core/styles.css";
 
 import { useEffect, useRef, useState } from "react";
@@ -9,6 +11,8 @@ import {
   FlipBook,
   Page,
 } from "@openpageflip/react";
+import type { GeneratedAlbum } from "../../lib/album-ai/types";
+import { getObjectPosition } from "../../lib/album-ai/photo-fitting-engine";
 
 // =====================================================
 // TYPES
@@ -67,12 +71,15 @@ interface DynamicFrame {
   y: number;
   width: number;
   height: number;
+  objectFit?: "cover" | "contain";
+  objectPosition?: string;
 }
 
 interface AlbumPage {
   id: string;
   images: StoredImage[];
   frames: DynamicFrame[];
+  frameStyle?: string;
   // Optional layout override for this specific page.
   layoutDesign?: AlbumDesign;
 }
@@ -97,6 +104,9 @@ export default function Home() {
 
   const [albumCreated, setAlbumCreated] =
     useState(false);
+
+  const [generatedAIAlbum, setGeneratedAIAlbum] =
+    useState<GeneratedAlbum | null>(null);
 
   const [activeAlbumTool, setActiveAlbumTool] =
     useState<"frames" | "backgrounds" | "stickers" | "text" | "borders" | "settings">("frames");
@@ -522,6 +532,7 @@ export default function Home() {
   // =====================================================
 
   const resetAlbum = () => {
+    setGeneratedAIAlbum(null);
     setAlbumCreated(false);
     setActiveAlbumTool("frames");
     setCurrentBookPage(0);
@@ -919,27 +930,6 @@ export default function Home() {
         return "Graduation Story";
       default:
         return "Classic Memories";
-    }
-  };
-
-  const getThemeIcon = (
-    theme: AlbumTheme
-  ) => {
-    switch (theme) {
-      case "travel":
-        return "✈️";
-      case "birthday":
-        return "🎂";
-      case "wedding":
-        return "💍";
-      case "family":
-        return "👨‍👩‍👧";
-      case "party":
-        return "🎉";
-      case "graduation":
-        return "🎓";
-      default:
-        return "📖";
     }
   };
 
@@ -1917,7 +1907,7 @@ export default function Home() {
 
       pages.push({
         id:
-          `page-${pageNumber}-${Date.now()}-${imageIndex}`,
+          `page-${pageNumber}-${imageIndex}`,
         images: pageImages,
         frames:
           calculateDynamicFrames(
@@ -1938,6 +1928,57 @@ export default function Home() {
   // =====================================================
   // CREATE ALBUM
   // =====================================================
+
+  // Convert the AI album engine output into the existing OpenPageFlip page model.
+  const convertAIAlbumToPages = (
+    aiAlbum: GeneratedAlbum,
+    availableImages: StoredImage[],
+    fallbackDesign: AlbumDesign
+  ): AlbumPage[] => {
+    const imageById = new Map(availableImages.map((image) => [image.id, image]));
+
+    return aiAlbum.pages
+      .map((aiPage, pageIndex): AlbumPage | null => {
+        const pageImages = aiPage.photoIds
+          .map((photoId) => imageById.get(photoId))
+          .filter((image): image is StoredImage => Boolean(image));
+
+        if (pageImages.length === 0) return null;
+
+        const frames = aiPage.layout.slots
+          .filter((slot) => slot.photoId && imageById.has(slot.photoId))
+          .map((slot) => {
+            const normalizeCoordinate = (value: number) =>
+              Math.abs(value) <= 1 ? value * 100 : value;
+            const image = imageById.get(slot.photoId as string)!;
+            const slotAspect = Math.max(slot.width / Math.max(slot.height, 0.0001), 0.01);
+
+            return {
+              imageId: slot.photoId as string,
+              x: normalizeCoordinate(slot.x),
+              y: normalizeCoordinate(slot.y),
+              width: normalizeCoordinate(slot.width),
+              height: normalizeCoordinate(slot.height),
+              objectFit: slot.objectFit,
+              objectPosition: getObjectPosition(image, slotAspect),
+            };
+          });
+
+        const safeFrames =
+          frames.length === pageImages.length
+            ? frames
+            : calculateDynamicFrames(pageImages, fallbackDesign, "classic");
+
+        return {
+          id: aiPage.id || `ai-page-${pageIndex + 1}`,
+          images: pageImages,
+          frames: safeFrames,
+          frameStyle: aiPage.frame.style,
+          layoutDesign: fallbackDesign,
+        };
+      })
+      .filter((page): page is AlbumPage => page !== null);
+  };
 
   const createAlbum =
     async () => {
@@ -1999,112 +2040,69 @@ export default function Home() {
           requestedDesign
         );
 
-        const response =
-          await fetch(
-            "/api/album-analyze",
-            {
-              method:
-                "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify({
-                  images,
-                  prompt: albumPrompt,
-                  theme: requestedTheme,
-                }),
-            }
-          );
-
-        const result =
-          await response.json();
-
-        if (
-          !response.ok
-        ) {
-          throw new Error(
-            result.error ||
-              "Album analysis failed"
-          );
-        }
-
-        if (
-          !result.success
-        ) {
-          throw new Error(
-            result.error ||
-              "Album analysis failed"
-          );
-        }
-
-        const analyzedImages =
-          images.map(
-            (image) => {
-              const analysisResult =
-                result.results.find(
-                  (
-                    item: any
-                  ) =>
-                    item.id ===
-                    image.id
-                );
-
-              if (
-                !analysisResult
-              ) {
-                return image;
-              }
-
-              return {
-                ...image,
-
-                analysis: {
-                  finalLabel:
-                    analysisResult.finalLabel ||
-                    "Unknown location",
-
-                  finalConfidence:
-                    analysisResult.finalConfidence ||
-                    0,
-
-                  detectionType:
-                    analysisResult.detectionType ||
-                    "general_location",
-
-                  labels:
-                    analysisResult.labels ||
-                    [],
-                },
-              };
-            }
-          );
+        // The album AI now runs locally through the TypeScript generator.
+        // This avoids sending the full base64 photo collection through
+        // /api/album-analyze and avoids the old hosted Hugging Face flow.
+        // The generator performs event classification, section detection,
+        // grouping and page-layout generation in one pipeline.
 
         // Measure the real image dimensions before designing pages.
         const measuredImages =
           await addImageMetadata(
-            analyzedImages
+            images
           );
 
-        // Keep the same automatic arrangement used during upload.
-        const arrangedImages =
-          autoArrangeImages(
-            measuredImages
+        // Run the hierarchical AI album engine. It classifies the event,
+        // groups related photographs and selects the generated page layouts.
+        const { generateAlbum } = await import("../../lib/album-ai/album-generator");
+
+        const aiAlbum = await generateAlbum(
+          measuredImages.map((image) => ({
+            id: image.id,
+            fileName: image.name,
+            data: image.data,
+            width: image.width,
+            height: image.height,
+            faces: image.faces,
+            labels: image.analysis?.labels?.map((item) => item.label),
+          })),
+          { title: finalAlbumName }
+        );
+
+        setGeneratedAIAlbum(aiAlbum);
+
+        // Keep related photographs together according to the AI groups.
+        const imageById = new Map(
+          measuredImages.map((image) => [image.id, image])
+        );
+
+        const aiOrderedImages = aiAlbum.groups
+          .slice()
+          .sort((a, b) => a.order - b.order)
+          .flatMap((group) =>
+            group.photoIds
+              .map((photoId) => imageById.get(photoId))
+              .filter((image): image is StoredImage => Boolean(image))
           );
 
-        setImages(
-          arrangedImages
+        const orderedIds = new Set(aiOrderedImages.map((image) => image.id));
+        const arrangedImages = [
+          ...aiOrderedImages,
+          ...measuredImages.filter((image) => !orderedIds.has(image.id)),
+        ];
+
+        setImages(arrangedImages);
+
+        const aiPages = convertAIAlbumToPages(
+          aiAlbum,
+          arrangedImages,
+          requestedDesign
         );
 
         setAlbumPages(
-          generateAlbumPages(
-            arrangedImages,
-            requestedDesign,
-            requestedTheme
-          )
+          aiPages.length > 0
+            ? aiPages
+            : generateAlbumPages(arrangedImages, requestedDesign, requestedTheme)
         );
 
         setBookKey(
@@ -2415,10 +2413,8 @@ export default function Home() {
   // This is important for modern phone photos because a 4K/12MP
   // image can otherwise consume a lot of browser/WebGL memory.
   //
-  // Detection strategy:
-  // 1. MediaPipe TFJS FULL model - best first pass for group photos.
-  // 2. MediaPipe TFJS SHORT model - faster fallback.
-  // 3. BlazeFace - independent fallback if MediaPipe fails.
+  // Detection uses BlazeFace, which is compatible with the current browser
+  // bundle and is loaded only when a photo editor is opened.
   //
   // All returned coordinates are mapped back to the original image
   // dimensions so they can later be used by the crop/layout engine.
@@ -2441,7 +2437,7 @@ export default function Home() {
       });
 
       // decode() makes sure the browser has actually decoded the pixels
-      // before TensorFlow/MediaPipe receives the image.
+      // before TensorFlow receives the image.
       if (typeof image.decode === "function") {
         try {
           await image.decode();
@@ -2515,43 +2511,6 @@ export default function Home() {
       height: Math.max(0, box.height / scale),
     });
 
-    const detectWithMediaPipe = async (
-      canvas: HTMLCanvasElement,
-      scale: number,
-      modelType: "full" | "short"
-    ): Promise<FaceBox[]> => {
-      const faceDetection =
-        await import("@tensorflow-models/face-detection");
-
-      const detector =
-        await faceDetection.createDetector(
-          faceDetection.SupportedModels.MediaPipeFaceDetector,
-          {
-            runtime: "tfjs",
-            maxFaces: 20,
-            modelType,
-          }
-        );
-
-      try {
-        const faces = await detector.estimateFaces(canvas);
-
-        return faces.map((face) =>
-          mapBoxToOriginal(
-            {
-              x: face.box.xMin,
-              y: face.box.yMin,
-              width: face.box.width,
-              height: face.box.height,
-            },
-            scale
-          )
-        );
-      } finally {
-        detector.dispose();
-      }
-    };
-
     const detectWithBlazeFace = async (
       canvas: HTMLCanvasElement,
       scale: number
@@ -2582,9 +2541,8 @@ export default function Home() {
           );
         });
       } finally {
-        // BlazeFace does not expose the same detector.dispose() API
-        // as the MediaPipe TFJS detector, so the model is released by
-        // the browser once this async task finishes.
+        // BlazeFace does not expose a dispose() API. Its tensors are released
+        // by the browser once this short-lived detection task completes.
       }
     };
 
@@ -2619,41 +2577,17 @@ export default function Home() {
         let faces: FaceBox[] = [];
         let lastError: unknown = null;
 
-        // FULL is intentionally first: it is better suited to a
-        // photograph containing several people at different distances.
-        for (const modelType of ["full", "short"] as const) {
-          try {
-            faces = await detectWithMediaPipe(
-              canvas,
-              scale,
-              modelType
-            );
-
-            if (faces.length > 0) break;
-          } catch (error) {
-            lastError = error;
-            console.warn(
-              `MediaPipe ${modelType} face detection failed; trying fallback.`,
-              error
-            );
-          }
-        }
-
-        // BlazeFace is a separate detector, so a MediaPipe model-loading
-        // or runtime problem does not automatically mean "zero faces".
-        if (faces.length === 0) {
-          try {
-            faces = await detectWithBlazeFace(
-              canvas,
-              scale
-            );
-          } catch (error) {
-            lastError = error;
-            console.warn(
-              "BlazeFace fallback failed.",
-              error
-            );
-          }
+        try {
+          faces = await detectWithBlazeFace(
+            canvas,
+            scale
+          );
+        } catch (error) {
+          lastError = error;
+          console.warn(
+            "BlazeFace face detection failed.",
+            error
+          );
         }
 
         if (!active) return;
@@ -2682,15 +2616,6 @@ export default function Home() {
           )
         );
 
-        setSelectedImage((currentImage) =>
-          currentImage &&
-          currentImage.id === selectedImage.id
-            ? {
-                ...currentImage,
-                faces,
-              }
-            : currentImage
-        );
       } catch (error) {
         console.error(
           "Automatic face detection failed:",
@@ -2715,7 +2640,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [selectedImage?.id]);
+  }, [selectedImage]);
 
   // =====================================================
   // PHOTO FRAME
@@ -2728,9 +2653,13 @@ export default function Home() {
   const PhotoFrame = ({
     image,
     className = "",
+    objectPosition = "50% 50%",
+    objectFit = "cover",
   }: {
     image: StoredImage;
     className?: string;
+    objectPosition?: string;
+    objectFit?: "cover" | "contain";
   }) => {
     return (
       <button
@@ -2746,6 +2675,7 @@ export default function Home() {
           alt=""
           aria-hidden="true"
           className="album-photo-background"
+          style={{ objectPosition }}
         />
 
         <img
@@ -2757,6 +2687,7 @@ export default function Home() {
             "Album photograph"
           }
           className="album-photo-main"
+          style={{ objectPosition, objectFit }}
         />
 
         <span className="album-photo-edit-hint">
@@ -2781,23 +2712,17 @@ export default function Home() {
   // supplied references: vintage travel stationery, soft
   // watercolor party stationery, and ornate wedding paper.
 
-  const ThemeDecorations = ({
-    theme,
-  }: {
-    theme: AlbumTheme;
-  }) => {
-    if (theme === "classic") {
-      return null;
-    }
-
-    return (
+  const themeDecorations =
+    albumTheme === "classic"
+      ? null
+      : (
       <svg
         className="theme-decorations"
         viewBox="0 0 500 650"
         preserveAspectRatio="none"
         aria-hidden="true"
       >
-        {theme === "travel" && (
+        {albumTheme === "travel" && (
           <g className="theme-art travel-art">
             <path
               className="travel-contour"
@@ -2913,7 +2838,7 @@ export default function Home() {
           </g>
         )}
 
-        {theme === "birthday" && (
+        {albumTheme === "birthday" && (
           <g className="theme-art birthday-art">
             <path
               className="birthday-bunting"
@@ -3015,7 +2940,7 @@ export default function Home() {
           </g>
         )}
 
-        {theme === "wedding" && (
+        {albumTheme === "wedding" && (
           <g className="theme-art wedding-art">
             <g>
               <circle
@@ -3163,7 +3088,7 @@ export default function Home() {
           </g>
         )}
 
-        {theme === "family" && (
+        {albumTheme === "family" && (
           <g className="theme-art family-art">
             <path
               d="M25 620 C55 570 72 520 72 465"
@@ -3178,7 +3103,7 @@ export default function Home() {
           </g>
         )}
 
-        {theme === "party" && (
+        {albumTheme === "party" && (
           <g className="theme-art party-art">
             <path
               d="M25 80 l12 14 M475 80 l-12 14 M34 560 l10 -10 M466 560 l-10 -10"
@@ -3188,7 +3113,7 @@ export default function Home() {
           </g>
         )}
 
-        {theme === "graduation" && (
+        {albumTheme === "graduation" && (
           <g className="theme-art graduation-art">
             <path
               d="M250 35 l6 14 15 2 -11 10 3 15 -13 -8 -13 8 3 -15 -11 -10 15 -2 Z"
@@ -3200,7 +3125,6 @@ export default function Home() {
         )}
       </svg>
     );
-  };
 
 
   const renderAlbumPage = (
@@ -3210,7 +3134,7 @@ export default function Home() {
 
     return (
       <div
-        className={`dynamic-template-page dynamic-design-${pageDesign} dynamic-theme-${albumTheme}`}
+        className={`dynamic-template-page dynamic-design-${pageDesign} dynamic-theme-${albumTheme} dynamic-frame-${page.frameStyle || "minimal"}`}
         data-theme={albumTheme}
         aria-label={`${getThemeLabel(albumTheme)} album page`}
         /*
@@ -3219,7 +3143,7 @@ export default function Home() {
          * dedicated photo editor.
          */
       >
-        <ThemeDecorations theme={albumTheme} />
+        {themeDecorations}
 
         <button
           type="button"
@@ -3302,7 +3226,11 @@ export default function Home() {
                 setDraggedAlbumTargetId(null);
               }}
             >
-              <PhotoFrame image={image} />
+              <PhotoFrame
+                image={image}
+                objectPosition={frame.objectPosition}
+                objectFit={frame.objectFit || "cover"}
+              />
             </div>
           );
         })}
@@ -3945,6 +3873,89 @@ export default function Home() {
           pointer-events: none;
         }
 
+        .dynamic-template-page .dynamic-photo-slot {
+          position: absolute;
+          z-index: 4;
+          min-width: 0;
+          min-height: 0;
+          overflow: hidden;
+        }
+
+        .album-photo-frame {
+          position: relative;
+          display: block;
+          width: 100%;
+          height: 100%;
+          min-width: 0;
+          min-height: 0;
+          padding: 0;
+          margin: 0;
+          border: 0;
+          overflow: hidden;
+          background: #f4f1eb;
+          isolation: isolate;
+        }
+
+        .album-photo-background,
+        .album-photo-main {
+          position: absolute;
+          inset: 0;
+          display: block;
+          width: 100%;
+          height: 100%;
+          max-width: none;
+          max-height: none;
+          margin: 0;
+          border: 0;
+        }
+
+        .album-photo-background {
+          z-index: 0;
+          object-fit: cover;
+          transform: scale(1.08);
+          filter: blur(16px) saturate(0.78);
+          opacity: 0.28;
+        }
+
+        .album-photo-main {
+          z-index: 1;
+          object-fit: cover;
+          object-position: 50% 50%;
+          backface-visibility: hidden;
+        }
+
+        .dynamic-frame-fullBleed .album-photo-frame {
+          border: 0;
+          box-shadow: none;
+        }
+
+        .dynamic-frame-editorial .album-photo-frame,
+        .dynamic-frame-classic .album-photo-frame {
+          padding: 6px;
+          background: #fff;
+          box-shadow: 0 1px 5px rgba(0,0,0,0.10);
+        }
+
+        .dynamic-frame-minimal .album-photo-frame {
+          padding: 4px;
+          background: #fff;
+        }
+
+        .dynamic-frame-cinematic .album-photo-frame {
+          padding: 3px;
+          background: #111;
+        }
+
+        .dynamic-frame-decorative .album-photo-frame {
+          padding: 7px;
+          background: rgba(255,255,255,0.98);
+          box-shadow: 0 3px 10px rgba(80,60,30,0.12);
+        }
+
+        .dynamic-frame-none .album-photo-frame {
+          padding: 0;
+          background: transparent;
+        }
         .dynamic-template-page .dynamic-photo-slot {
           position: absolute;
           z-index: 4;
@@ -4648,22 +4659,18 @@ export default function Home() {
            composition style, not a renamed version of Classic. */
         .dynamic-design-collage .dynamic-photo-slot:nth-child(1) {
           z-index: 4;
-          transform: rotate(-2deg);
         }
 
         .dynamic-design-collage .dynamic-photo-slot:nth-child(2) {
           z-index: 3;
-          transform: rotate(2deg);
         }
 
         .dynamic-design-collage .dynamic-photo-slot:nth-child(3) {
           z-index: 5;
-          transform: rotate(1.2deg);
         }
 
         .dynamic-design-collage .dynamic-photo-slot:nth-child(4) {
           z-index: 2;
-          transform: rotate(-1.5deg);
         }
 
         .dynamic-design-editorial .dynamic-photo-slot {
@@ -4714,8 +4721,7 @@ export default function Home() {
         .dynamic-design-story .album-photo-main {
           width: 100%;
           height: 100%;
-          object-fit: contain;
-          object-position: center;
+          object-fit: cover;
         }
 
         /* =================================================
@@ -6112,6 +6118,22 @@ export default function Home() {
         {albumCreated && (
           <section className="digital-album-section">
 
+            {generatedAIAlbum && (
+              <div style={{
+                margin: "0 auto 12px",
+                maxWidth: "1200px",
+                padding: "10px 14px",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "10px",
+                background: "rgba(255,255,255,0.035)",
+                color: "#c9c9c9",
+                fontSize: "12px",
+              }}>
+                AI arranged {generatedAIAlbum.photos.length} photos into {generatedAIAlbum.groups.length} section{generatedAIAlbum.groups.length === 1 ? "" : "s"} and {generatedAIAlbum.pages.length} page{generatedAIAlbum.pages.length === 1 ? "" : "s"}.
+                {generatedAIAlbum.eventType !== "other" ? " Event detected: " + generatedAIAlbum.eventType + "." : ""}
+              </div>
+            )}
+
             <div className="ai-album-editor-shell">
               <header className="ai-album-topbar">
                 <div className="ai-album-brand">
@@ -6304,9 +6326,7 @@ export default function Home() {
                     <div className="book-cover-spine" />
 
                     <div className="cover-theme-decoration">
-                      <ThemeDecorations
-                        theme={albumTheme}
-                      />
+                      {themeDecorations}
                     </div>
 
                     <div className="cover-border">
@@ -6454,12 +6474,12 @@ export default function Home() {
                     <div className="ai-album-page-strip">
                       <button type="button" className="ai-album-page-strip-arrow" onClick={previousPage} aria-label="Previous page">‹</button>
 
-                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === 0 ? "active" : ""}`} onClick={() => { setCurrentBookPage(0); setBookOpened(false); bookRef.current?.turnToPage(0); }} aria-label="Front cover">
+                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === 0 ? "active" : ""}`} onClick={() => { setCurrentBookPage(0); setBookOpened(false); bookRef.current?.turnTo(0); }} aria-label="Front cover">
                         <span className="ai-album-page-thumb-cover">{albumName || "Album"}</span>
                         <span className="ai-album-page-thumb-label">COVER</span>
                       </button>
 
-                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === 1 ? "active" : ""}`} onClick={() => { setCurrentBookPage(1); setBookOpened(true); bookRef.current?.turnToPage(1); }} aria-label="Title page">
+                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === 1 ? "active" : ""}`} onClick={() => { setCurrentBookPage(1); setBookOpened(true); bookRef.current?.turnTo(1); }} aria-label="Title page">
                         <span className="ai-album-page-thumb-title">{albumName || getThemeLabel(albumTheme)}</span>
                         <span className="ai-album-page-thumb-label">TITLE</span>
                       </button>
@@ -6470,7 +6490,7 @@ export default function Home() {
                         const columns = count >= 3 ? "repeat(3,1fr)" : count === 2 ? "repeat(2,1fr)" : "1fr";
                         const rows = count >= 4 ? "repeat(2,1fr)" : "1fr";
                         return (
-                          <button key={`thumb-${page.id}`} type="button" className={`ai-album-page-thumb ${currentBookPage === bookPageIndex ? "active" : ""}`} onClick={() => { setCurrentBookPage(bookPageIndex); setBookOpened(true); bookRef.current?.turnToPage(bookPageIndex); }} aria-label={`Album page ${pageIndex + 1}`}>
+                          <button key={`thumb-${page.id}`} type="button" className={`ai-album-page-thumb ${currentBookPage === bookPageIndex ? "active" : ""}`} onClick={() => { setCurrentBookPage(bookPageIndex); setBookOpened(true); bookRef.current?.turnTo(bookPageIndex); }} aria-label={`Album page ${pageIndex + 1}`}>
                             <span className="ai-album-page-thumb-grid" style={{ gridTemplateColumns: columns, gridTemplateRows: rows }}>
                               {page.images.slice(0,4).map((image) => <span key={image.id} className="ai-album-page-thumb-photo"><img src={image.data} alt="" /></span>)}
                             </span>
@@ -6479,7 +6499,7 @@ export default function Home() {
                         );
                       })}
 
-                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === albumPages.length + 2 ? "active" : ""}`} onClick={() => { const endPage = albumPages.length + 2; setCurrentBookPage(endPage); setBookOpened(true); bookRef.current?.turnToPage(endPage); }} aria-label="End page">
+                      <button type="button" className={`ai-album-page-thumb ${currentBookPage === albumPages.length + 2 ? "active" : ""}`} onClick={() => { const endPage = albumPages.length + 2; setCurrentBookPage(endPage); setBookOpened(true); bookRef.current?.turnTo(endPage); }} aria-label="End page">
                         <span className="ai-album-page-thumb-title">THE END</span>
                         <span className="ai-album-page-thumb-label">END</span>
                       </button>

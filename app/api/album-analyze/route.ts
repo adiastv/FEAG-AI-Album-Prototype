@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { pipeline } from "@huggingface/transformers";
 
-// Transformers.js runs server-side for this API route.
-export const runtime = "nodejs";
-
 // =====================================================
 // TYPES
 // =====================================================
@@ -11,24 +8,6 @@ export const runtime = "nodejs";
 type Detection = {
   label: string;
   score: number;
-};
-
-type LandmarkApiResponse = {
-  success: boolean;
-
-  bestLabel?: string;
-
-  bestConfidence?: number;
-
-  detectionType?: string;
-
-  labels?: Detection[];
-
-  famousLabels?: Detection[];
-
-  isMonumentLike?: boolean;
-
-  error?: string;
 };
 
 type AlbumImage = {
@@ -43,7 +22,11 @@ type AlbumImage = {
 const CLIP_MODEL =
   "Xenova/clip-vit-large-patch14";
 
-type ClipClassifier = Awaited<ReturnType<typeof pipeline>>;
+type ZeroShotResult = Array<{ label: string; score: number }>;
+type ClipClassifier = (
+  image: string,
+  candidateLabels: string[]
+) => Promise<ZeroShotResult>;
 
 let clipClassifierPromise: Promise<ClipClassifier> | null = null;
 
@@ -54,7 +37,7 @@ function getClipClassifier(): Promise<ClipClassifier> {
     clipClassifierPromise = pipeline(
       "zero-shot-image-classification",
       CLIP_MODEL
-    );
+    ) as unknown as Promise<ClipClassifier>;
   }
 
   return clipClassifierPromise;
