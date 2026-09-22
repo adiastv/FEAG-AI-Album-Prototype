@@ -12,7 +12,6 @@ import {
   Page,
 } from "@openpageflip/react";
 import type { GeneratedAlbum } from "../../lib/album-ai/types";
-import { getObjectPosition } from "../../lib/album-ai/photo-fitting-engine";
 
 // =====================================================
 // TYPES
@@ -1929,6 +1928,35 @@ export default function Home() {
   // CREATE ALBUM
   // =====================================================
 
+  // Keep AI-generated crops visually centered and face-aware without
+  // depending on a separate photo-fitting-engine export. This is deterministic:
+  // the same image + face boxes always produce the same position.
+  const getPhotoObjectPosition = (
+    image: StoredImage
+  ): string => {
+    const faces = image.faces ?? [];
+
+    if (faces.length === 0) {
+      return "50% 50%";
+    }
+
+    const imageWidth = Math.max(image.width ?? 1, 1);
+    const imageHeight = Math.max(image.height ?? 1, 1);
+
+    const center = faces.reduce(
+      (accumulator, face) => ({
+        x: accumulator.x + face.x + face.width / 2,
+        y: accumulator.y + face.y + face.height / 2,
+      }),
+      { x: 0, y: 0 }
+    );
+
+    const x = Math.max(0, Math.min(100, (center.x / faces.length / imageWidth) * 100));
+    const y = Math.max(0, Math.min(100, (center.y / faces.length / imageHeight) * 100));
+
+    return `${x.toFixed(2)}% ${y.toFixed(2)}%`;
+  };
+
   // Convert the AI album engine output into the existing OpenPageFlip page model.
   const convertAIAlbumToPages = (
     aiAlbum: GeneratedAlbum,
@@ -1951,8 +1979,6 @@ export default function Home() {
             const normalizeCoordinate = (value: number) =>
               Math.abs(value) <= 1 ? value * 100 : value;
             const image = imageById.get(slot.photoId as string)!;
-            const slotAspect = Math.max(slot.width / Math.max(slot.height, 0.0001), 0.01);
-
             return {
               imageId: slot.photoId as string,
               x: normalizeCoordinate(slot.x),
@@ -1960,7 +1986,7 @@ export default function Home() {
               width: normalizeCoordinate(slot.width),
               height: normalizeCoordinate(slot.height),
               objectFit: slot.objectFit,
-              objectPosition: getObjectPosition(image, slotAspect),
+              objectPosition: getPhotoObjectPosition(image),
             };
           });
 
@@ -3894,6 +3920,7 @@ export default function Home() {
           overflow: hidden;
           background: #f4f1eb;
           isolation: isolate;
+          box-sizing: border-box;
         }
 
         .album-photo-background,
@@ -3907,14 +3934,23 @@ export default function Home() {
           max-height: none;
           margin: 0;
           border: 0;
+          box-sizing: border-box;
         }
 
+        /*
+         * The layout engine already calculates every frame at the real
+         * photograph aspect ratio. The background therefore does not need
+         * to crop/blur the original photo to hide empty space. Keeping it
+         * subtle prevents the duplicate image layer from making the main
+         * photograph look soft.
+         */
         .album-photo-background {
           z-index: 0;
           object-fit: cover;
-          transform: scale(1.08);
-          filter: blur(16px) saturate(0.78);
-          opacity: 0.28;
+          transform: none;
+          filter: none;
+          opacity: 0;
+          pointer-events: none;
         }
 
         .album-photo-main {
@@ -3922,6 +3958,7 @@ export default function Home() {
           object-fit: cover;
           object-position: 50% 50%;
           backface-visibility: hidden;
+          image-rendering: auto;
         }
 
         .dynamic-frame-fullBleed .album-photo-frame {
@@ -4721,7 +4758,6 @@ export default function Home() {
         .dynamic-design-story .album-photo-main {
           width: 100%;
           height: 100%;
-          object-fit: cover;
         }
 
         /* =================================================
