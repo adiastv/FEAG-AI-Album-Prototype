@@ -47,6 +47,9 @@ const TEMPLATES: Record<string, Template> = {
   editorialFive: { type: "asymmetric", slots: [
     slot("hero", 0.04, 0.05, 0.56, 0.48), slot("support-top", 0.64, 0.05, 0.32, 0.22), slot("support-middle", 0.64, 0.31, 0.32, 0.22), slot("detail-left", 0.04, 0.59, 0.32, 0.35), slot("story-bottom", 0.40, 0.59, 0.56, 0.35),
   ] },
+  mosaicFive: { type: "collage", slots: [
+    slot("hero", 0.04, 0.04, 0.57, 0.46), slot("support-top", 0.64, 0.04, 0.32, 0.46), slot("detail-left", 0.04, 0.54, 0.28, 0.42), slot("detail-middle", 0.36, 0.54, 0.28, 0.42), slot("detail-right", 0.68, 0.54, 0.28, 0.42),
+  ] },
   mosaicSix: { type: "collage", slots: [
     slot("hero", 0.06, 0.05, 0.47, 0.63), slot("story-top", 0.56, 0.05, 0.38, 0.27), slot("story-middle", 0.56, 0.35, 0.38, 0.33), slot("detail-left", 0.06, 0.72, 0.25, 0.22), slot("detail-middle", 0.34, 0.72, 0.25, 0.22), slot("detail-right", 0.62, 0.72, 0.32, 0.22),
   ] },
@@ -143,7 +146,7 @@ function candidatesFor(photos: PhotoAnalysis[]): Template[] {
     case 2: return [TEMPLATES.portraitDuo, TEMPLATES.landscapeDuo, TEMPLATES.offsetDuo];
     case 3: return [TEMPLATES.heroTwo, TEMPLATES.editorialThree, TEMPLATES.cinematicThree];
     case 4: return [TEMPLATES.editorialFour, TEMPLATES.cinematicFour, TEMPLATES.portraitShowcase];
-    case 5: return [TEMPLATES.editorialFive];
+    case 5: return [TEMPLATES.mosaicFive, TEMPLATES.editorialFive];
     case 6: return [TEMPLATES.mosaicSix];
     case 7: return [TEMPLATES.mosaicSeven];
     case 8: return [TEMPLATES.mosaicEight];
@@ -165,6 +168,16 @@ function bindSlots(template: Template, photos: PhotoAnalysis[], match: TemplateM
   });
 }
 
+function stableLayoutId(template: Template, photos: PhotoAnalysis[], match: TemplateMatch): string {
+  const value = `${template.type}|${match.photoIndexes.map((index) => photos[index].id).join("|")}`;
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `layout-${template.type}-${(hash >>> 0).toString(36)}`;
+}
+
 export function createProfessionalLayout(photos: PhotoAnalysis[], event: EventType, section: string): AlbumLayout {
   // Kept in the API because the generator owns that context. Geometry itself
   // is intentionally content-led, so every event receives the same design bar.
@@ -172,7 +185,7 @@ export function createProfessionalLayout(photos: PhotoAnalysis[], event: EventTy
   void section;
   const { template, match } = chooseTemplate(photos);
   return {
-    id: `layout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: stableLayoutId(template, photos, match),
     type: template.type,
     slots: bindSlots(template, photos, match),
     spacing: template.type === "collage" ? 1.5 : 2.5,

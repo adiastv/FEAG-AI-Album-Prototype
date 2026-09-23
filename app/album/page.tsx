@@ -12,6 +12,7 @@ import {
   Page,
 } from "@openpageflip/react";
 import type { GeneratedAlbum } from "../../lib/album-ai/types";
+import { getObjectPosition } from "../../lib/album-ai/photo-fitting-engine";
 
 // =====================================================
 // TYPES
@@ -132,6 +133,9 @@ export default function Home() {
   const [albumName, setAlbumName] =
     useState("Your Album");
 
+  // The cover is a presentation choice, independent from page geometry.
+  const [coverImageId, setCoverImageId] = useState<string | null>(null);
+
   // Reordering is intentionally an inside-the-album interaction.
   const [draggedAlbumImageId, setDraggedAlbumImageId] =
     useState<string | null>(null);
@@ -162,7 +166,18 @@ export default function Home() {
   const bookRef =
     useRef<Book>(null);
 
+  // Stable layout snapshots prevent a design from changing when the user
+  // switches away and returns to it. The cache key includes image geometry,
+  // so a real crop/aspect-ratio change naturally creates a new snapshot.
+  const designLayoutCache =
+    useRef<Map<string, DynamicFrame[]>>(new Map());
+
   const pageAddFileInputRef =
+    useRef<HTMLInputElement>(null);
+
+  // Album-level uploader. This stays available AFTER the album has been
+  // created, so photographs can be added again once some were removed.
+  const albumAddFileInputRef =
     useRef<HTMLInputElement>(null);
 
   // =====================================================
@@ -248,6 +263,85 @@ export default function Home() {
   const getPageDesign = (page: AlbumPage): AlbumDesign =>
     page.layoutDesign || albumDesign;
 
+  const getLayoutCacheKey = (
+    pageImages: StoredImage[],
+    design: AlbumDesign
+  ) =>
+    `${design}|${pageImages.map((image) =>
+      [
+        image.id,
+        image.width || 0,
+        image.height || 0,
+        Number((image.aspectRatio || 0).toFixed(6)),
+      ].join(":")
+    ).sort().join("|")}`;
+
+  const getStableDynamicFrames = (
+    pageImages: StoredImage[],
+    design: AlbumDesign
+  ): DynamicFrame[] => {
+    const key = getLayoutCacheKey(pageImages, design);
+    const cached = designLayoutCache.current.get(key);
+
+    if (cached) {
+      return cached.map((frame) => ({ ...frame }));
+    }
+
+    const generated = calculateDynamicFrames(
+      pageImages,
+      design,
+      "classic"
+    );
+
+    designLayoutCache.current.set(
+      key,
+      generated.map((frame) => ({ ...frame }))
+    );
+
+    return generated;
+  };
+
+  const storeDesignLayout = (page: AlbumPage, design: AlbumDesign) => {
+    designLayoutCache.current.set(
+      getLayoutCacheKey(page.images, design),
+      page.frames.map((frame) => ({ ...frame }))
+    );
+  };
+
+  const updateCachedPhotoFitting = (image: StoredImage) => {
+    designLayoutCache.current.forEach((frames, key) => {
+      const updatedFrames = frames.map((frame) =>
+        frame.imageId === image.id
+          ? {
+              ...frame,
+              objectPosition: getObjectPosition(
+                image,
+                frame.width / Math.max(frame.height, 0.0001)
+              ),
+            }
+          : frame
+      );
+      designLayoutCache.current.set(key, updatedFrames);
+    });
+  };
+
+  const swapCachedPhotoAssignments = (fromId: string, toId: string) => {
+    designLayoutCache.current.forEach((frames, key) => {
+      designLayoutCache.current.set(
+        key,
+        frames.map((frame) => ({
+          ...frame,
+          imageId:
+            frame.imageId === fromId
+              ? toId
+              : frame.imageId === toId
+                ? fromId
+                : frame.imageId,
+        }))
+      );
+    });
+  };
+
   // Swap actual photo objects while keeping the frame positions fixed.
   // This is the important part: we never mutate photo IDs, so React and
   // OpenPageFlip keep stable keys and the swap works reliably.
@@ -261,6 +355,10 @@ export default function Home() {
     const toImage = images.find((image) => image.id === toId);
 
     if (!fromImage || !toImage) return;
+
+    // A swap is an explicit document edit. Keep every saved design's frame
+    // rectangles and update only the photo assigned to those rectangles.
+    swapCachedPhotoAssignments(fromId, toId);
 
     setImages((currentImages) => {
       const fromIndex = currentImages.findIndex((image) => image.id === fromId);
@@ -339,7 +437,7 @@ export default function Home() {
         return currentPages;
       }
 
-      if (targetPage.images.length >= 4) {
+      if (targetPage.images.length >= 5) {
         return currentPages;
       }
 
@@ -354,10 +452,9 @@ export default function Home() {
             return {
               ...page,
               images: remaining,
-              frames: calculateDynamicFrames(
+              frames: getStableDynamicFrames(
                 remaining,
-                getPageDesign(page),
-                "classic"
+                getPageDesign(page)
               ),
             };
           }
@@ -367,10 +464,9 @@ export default function Home() {
             return {
               ...page,
               images: nextImages,
-              frames: calculateDynamicFrames(
+              frames: getStableDynamicFrames(
                 nextImages,
-                getPageDesign(page),
-                "classic"
+                getPageDesign(page)
               ),
             };
           }
@@ -396,16 +492,22 @@ export default function Home() {
     }
 
     const targetPage = albumPages.find((page) => page.id === targetPageId);
+    const isReplacingSelectedPhoto = Boolean(pageSwapSourceId);
     const availablePageSlots = targetPage
-      ? Math.max(0, 4 - targetPage.images.length)
+      ? isReplacingSelectedPhoto ? 1 : Math.max(0, 5 - targetPage.images.length)
       : 0;
-    const availableAlbumSlots = Math.max(0, 10 - images.length);
+    // When a photograph is being replaced, the outgoing photo frees its own
+    // slot, so the replacement must not be blocked by the 10 photo limit.
+    const availableAlbumSlots = Math.max(
+      0,
+      10 - images.length + (isReplacingSelectedPhoto ? 1 : 0)
+    );
     const maxFiles = Math.min(availablePageSlots, availableAlbumSlots);
 
     if (maxFiles <= 0) {
       alert(
-        targetPage && targetPage.images.length >= 4
-          ? "This page already has the maximum of 4 photographs."
+        targetPage && targetPage.images.length >= 5
+          ? "This page already has the maximum of 5 photographs."
           : "You can upload a maximum of 10 photographs."
       );
       event.target.value = "";
@@ -439,31 +541,127 @@ export default function Home() {
 
       setImages((currentImages) => [...currentImages, ...newImages]);
 
+      const replacement = isReplacingSelectedPhoto ? newImages[0] : null;
+      const replaceId = pageSwapSourceId;
+
+      if (replacement && replaceId) {
+        setImages((currentImages) =>
+          currentImages.filter((image) => image.id !== replaceId)
+        );
+      }
+
       setAlbumPages((currentPages) =>
         currentPages.map((page) => {
           if (page.id !== targetPageId) return page;
 
-          const nextImages = [...page.images, ...newImages].slice(0, 4);
+          if (replacement && replaceId) {
+            return {
+              ...page,
+              images: page.images.map((image) =>
+                image.id === replaceId ? replacement : image
+              ),
+              frames: page.frames.map((frame) =>
+                frame.imageId === replaceId
+                  ? {
+                      ...frame,
+                      imageId: replacement.id,
+                      objectPosition: getObjectPosition(
+                        replacement,
+                        frame.width / Math.max(frame.height, 0.0001)
+                      ),
+                    }
+                  : frame
+              ),
+            };
+          }
+
+          const nextImages = [...page.images, ...newImages].slice(0, 5);
           return {
             ...page,
             images: nextImages,
-            frames: calculateDynamicFrames(
-              nextImages,
-              getPageDesign(page),
-              "classic"
-            ),
+            frames: getStableDynamicFrames(nextImages, getPageDesign(page)),
           };
         })
       );
 
       setBookKey((previous) => previous + 1);
       setBookOpened(true);
+      setPageSwapSourceId(null);
     } catch (error) {
       console.error("Could not add photos to album page:", error);
       alert("One or more photographs could not be added.");
     } finally {
       event.target.value = "";
     }
+  };
+
+  // =====================================================
+  // REMOVE PHOTO FROM CURRENT ALBUM PAGE
+  //
+  // The important rule here is: NEVER regenerate the page
+  // layout after a removal. We remove only the selected photo
+  // and its frame. Every other frame keeps its exact x/y/width/
+  // height, so the remaining composition does not move.
+  // =====================================================
+
+  const removePhotoFromAlbumPage = (
+    pageId: string,
+    imageId: string
+  ) => {
+    const pageToRestore = currentBookPage;
+    const nextPages = albumPages.map((page) => {
+      if (page.id !== pageId) return page;
+
+      return {
+        ...page,
+        images: page.images.filter(
+          (image) => image.id !== imageId
+        ),
+        frames: page.frames.filter(
+          (frame) => frame.imageId !== imageId
+        ),
+      };
+    });
+
+    setAlbumPages(nextPages);
+
+    // IMPORTANT: if the photograph is no longer used on any page, it must
+    // also leave the uploaded photo list. Otherwise it keeps occupying one
+    // of the 10 upload slots and no new photograph can ever be added.
+    const stillUsedSomewhere = nextPages.some((page) =>
+      page.images.some((image) => image.id === imageId)
+    );
+
+    if (!stillUsedSomewhere) {
+      setImages((currentImages) =>
+        currentImages.filter((image) => image.id !== imageId)
+      );
+
+      setCoverImageId((currentCover) =>
+        currentCover === imageId ? null : currentCover
+      );
+
+      // Drop cached layouts that still reference the deleted photograph.
+      designLayoutCache.current.forEach((frames, key) => {
+        if (frames.some((frame) => frame.imageId === imageId)) {
+          designLayoutCache.current.delete(key);
+        }
+      });
+    }
+
+    // If the photo editor happens to be open for this image,
+    // close it because the photograph is no longer on the page.
+    setSelectedImage((currentImage) =>
+      currentImage?.id === imageId ? null : currentImage
+    );
+
+    // Keep the existing FlipBook instance mounted. Re-mounting it resets
+    // OpenPageFlip to the front cover, which made a deletion look as though
+    // it had closed the album. React can update this page's contents in place.
+    setBookOpened(true);
+    window.requestAnimationFrame(() => {
+      bookRef.current?.turnTo(pageToRestore);
+    });
   };
 
   const changePageLayout = (
@@ -476,11 +674,7 @@ export default function Home() {
           ? {
               ...page,
               layoutDesign: design,
-              frames: calculateDynamicFrames(
-                page.images,
-                design,
-                "classic"
-              ),
+              frames: getStableDynamicFrames(page.images, design),
             }
           : page
       )
@@ -537,6 +731,7 @@ export default function Home() {
     setCurrentBookPage(0);
 
     setAlbumPages([]);
+    setCoverImageId(null);
 
     setPageEditorId(null);
     setPageSwapSourceId(null);
@@ -548,6 +743,110 @@ export default function Home() {
       (previous) =>
         previous + 1
     );
+  };
+
+  // =====================================================
+  // ADD MORE PHOTOS AFTER THE ALBUM EXISTS
+  //
+  // The original build only exposed the uploader before the album was
+  // created, so photos could never be added back after a removal.
+  // This adds them to the album in place: existing pages are filled first
+  // (max 5 per page) and any leftovers become new pages. No existing page
+  // layout is regenerated, so nothing already placed moves around.
+  // =====================================================
+
+  const handleAddPhotosToAlbum = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = event.target.files;
+
+    if (!files || files.length === 0) {
+      event.target.value = "";
+      return;
+    }
+
+    const remainingSlots = Math.max(0, 10 - images.length);
+
+    if (remainingSlots <= 0) {
+      alert(
+        "You already have 10 photographs. Remove one to add another."
+      );
+      event.target.value = "";
+      return;
+    }
+
+    const filesToAdd = Array.from(files).slice(0, remainingSlots);
+
+    if (files.length > remainingSlots) {
+      alert(
+        `Only ${remainingSlots} more photograph(s) can be added. Maximum is 10.`
+      );
+    }
+
+    try {
+      const newImages = await Promise.all(
+        filesToAdd.map(async (file, index) => {
+          const data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () =>
+              reject(new Error(`Could not read ${file.name}`));
+            reader.readAsDataURL(file);
+          });
+
+          const metadata = await readImageMetadata(data);
+
+          return {
+            id: `album-add-${Date.now()}-${index}-${Math.random()}`,
+            name: file.name,
+            data,
+            ...metadata,
+          } satisfies StoredImage;
+        })
+      );
+
+      setImages((currentImages) => [...currentImages, ...newImages]);
+
+      const queue = [...newImages];
+
+      const filledPages = albumPages.map((page) => {
+        const free = Math.max(0, 5 - page.images.length);
+        if (free === 0 || queue.length === 0) return page;
+
+        const taken = queue.splice(0, free);
+        const nextImages = [...page.images, ...taken];
+
+        return {
+          ...page,
+          images: nextImages,
+          frames: getStableDynamicFrames(nextImages, getPageDesign(page)),
+        };
+      });
+
+      const extraPages =
+        queue.length > 0
+          ? generateAlbumPages(queue, albumDesign, albumTheme).map(
+              (page, index) => ({
+                ...page,
+                id: `page-added-${Date.now()}-${index}`,
+              })
+            )
+          : [];
+
+      setAlbumPages([...filledPages, ...extraPages]);
+
+      if (!coverImageId && newImages[0]) {
+        setCoverImageId(newImages[0].id);
+      }
+
+      setBookKey((previous) => previous + 1);
+      setBookOpened(true);
+    } catch (error) {
+      console.error("Could not add photos to the album:", error);
+      alert("One or more photographs could not be added.");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   // =====================================================
@@ -1558,35 +1857,41 @@ export default function Home() {
       return frames;
     }
 
-    // Four-photo editorial: intentionally asymmetrical magazine grid.
+    // Editorial's 4/5-photo templates retain aligned edges and gutters.
     const editorialZones: PixelRect[] = [
       {
         x: rect.x,
         y: rect.y,
-        width: rect.width * 0.59,
-        height: rect.height * 0.57,
+        width: rect.width * 0.58,
+        height: rect.height * 0.58,
       },
       {
-        x: rect.x + rect.width * 0.64,
+        x: rect.x + rect.width * 0.62,
         y: rect.y,
-        width: rect.width * 0.32,
-        height: rect.height * 0.36,
+        width: rect.width * 0.38,
+        height: rect.height * 0.28,
+      },
+      {
+        x: rect.x + rect.width * 0.62,
+        y: rect.y + rect.height * 0.32,
+        width: rect.width * 0.38,
+        height: rect.height * 0.26,
       },
       {
         x: rect.x,
-        y: rect.y + rect.height * 0.64,
-        width: rect.width * 0.36,
-        height: rect.height * 0.30,
+        y: rect.y + rect.height * 0.62,
+        width: rect.width * 0.48,
+        height: rect.height * 0.34,
       },
       {
-        x: rect.x + rect.width * 0.42,
-        y: rect.y + rect.height * 0.46,
-        width: rect.width * 0.54,
-        height: rect.height * 0.48,
+        x: rect.x + rect.width * 0.52,
+        y: rect.y + rect.height * 0.62,
+        width: rect.width * 0.48,
+        height: rect.height * 0.34,
       },
     ];
 
-    pageImages.slice(0, 4).forEach((image, index) => {
+    pageImages.slice(0, 5).forEach((image, index) => {
       frames.push(
         fitAspectRatioInside(image, editorialZones[index])
       );
@@ -1608,6 +1913,47 @@ export default function Home() {
           height: rect.height * 0.9,
         }),
       ];
+    }
+
+    // Five-photo collages use a true mosaic. The previous fifth zone sat in
+    // the middle of the other four zones and obscured all of them.
+    if (pageImages.length === 5) {
+      const fivePhotoZones: PixelRect[] = [
+        {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width * 0.62,
+          height: rect.height * 0.48,
+        },
+        {
+          x: rect.x + rect.width * 0.65,
+          y: rect.y,
+          width: rect.width * 0.35,
+          height: rect.height * 0.48,
+        },
+        {
+          x: rect.x,
+          y: rect.y + rect.height * 0.52,
+          width: rect.width * 0.31,
+          height: rect.height * 0.48,
+        },
+        {
+          x: rect.x + rect.width * 0.345,
+          y: rect.y + rect.height * 0.52,
+          width: rect.width * 0.31,
+          height: rect.height * 0.48,
+        },
+        {
+          x: rect.x + rect.width * 0.69,
+          y: rect.y + rect.height * 0.52,
+          width: rect.width * 0.31,
+          height: rect.height * 0.48,
+        },
+      ];
+
+      return pageImages.map((image, index) =>
+        fitAspectRatioInside(image, fivePhotoZones[index])
+      );
     }
 
     const zones: PixelRect[] = [
@@ -1635,12 +1981,18 @@ export default function Home() {
         width: rect.width * 0.46,
         height: rect.height * 0.48,
       },
+      {
+        x: rect.x + rect.width * 0.35,
+        y: rect.y + rect.height * 0.37,
+        width: rect.width * 0.30,
+        height: rect.height * 0.28,
+      },
     ];
 
-    return pageImages.map((image, index) =>
+    return pageImages.slice(0, 5).map((image, index) =>
       fitAspectRatioInside(
         image,
-        zones[index % zones.length]
+        zones[index]
       )
     );
   };
@@ -1649,112 +2001,47 @@ export default function Home() {
     pageImages: StoredImage[],
     rect: PixelRect
   ): PixelFrame[] => {
-    if (pageImages.length === 1) {
-      return [
-        fitAspectRatioInside(pageImages[0], {
-          x: rect.x + rect.width * 0.12,
-          y: rect.y + rect.height * 0.04,
-          width: rect.width * 0.76,
-          height: rect.height * 0.88,
-        }),
-      ];
-    }
-
-    const frames: PixelFrame[] = [];
-
-    // STORY SEQUENCE = scrapbook / memory-journal composition.
-    // Photos are staggered and layered to feel like a sequence
-    // of moments rather than a magazine grid.
-
-    if (pageImages.length === 2) {
-      frames.push(
-        fitAspectRatioInside(pageImages[0], {
-          x: rect.x + rect.width * 0.05,
-          y: rect.y + rect.height * 0.03,
-          width: rect.width * 0.58,
-          height: rect.height * 0.62,
-        })
-      );
-
-      frames.push(
-        fitAspectRatioInside(pageImages[1], {
-          x: rect.x + rect.width * 0.40,
-          y: rect.y + rect.height * 0.42,
-          width: rect.width * 0.53,
-          height: rect.height * 0.51,
-        })
-      );
-
-      return frames;
-    }
-
-    if (pageImages.length === 3) {
-      // One central feature with two smaller memory cards.
-      frames.push(
-        fitAspectRatioInside(pageImages[0], {
-          x: rect.x + rect.width * 0.25,
-          y: rect.y + rect.height * 0.02,
-          width: rect.width * 0.50,
-          height: rect.height * 0.67,
-        })
-      );
-
-      frames.push(
-        fitAspectRatioInside(pageImages[1], {
-          x: rect.x,
-          y: rect.y + rect.height * 0.55,
-          width: rect.width * 0.38,
-          height: rect.height * 0.38,
-        })
-      );
-
-      frames.push(
-        fitAspectRatioInside(pageImages[2], {
-          x: rect.x + rect.width * 0.61,
-          y: rect.y + rect.height * 0.59,
-          width: rect.width * 0.36,
-          height: rect.height * 0.34,
-        })
-      );
-
-      return frames;
-    }
-
-    // Four-photo storyboard. This is deliberately NOT a 2x2 grid.
-    const storyZones: PixelRect[] = [
-      {
-        x: rect.x + rect.width * 0.18,
-        y: rect.y,
-        width: rect.width * 0.64,
-        height: rect.height * 0.48,
-      },
-      {
-        x: rect.x,
-        y: rect.y + rect.height * 0.40,
-        width: rect.width * 0.36,
-        height: rect.height * 0.35,
-      },
-      {
-        x: rect.x + rect.width * 0.64,
-        y: rect.y + rect.height * 0.38,
-        width: rect.width * 0.36,
-        height: rect.height * 0.36,
-      },
-      {
-        x: rect.x + rect.width * 0.25,
-        y: rect.y + rect.height * 0.69,
-        width: rect.width * 0.50,
-        height: rect.height * 0.27,
-      },
+    // Geometry is a stable template; fitting occurs independently below.
+    const templates: PixelRect[][] = [
+      [{ x: .10, y: .04, width: .80, height: .92 }],
+      [{ x: 0, y: .04, width: .485, height: .92 }, { x: .515, y: .04, width: .485, height: .92 }],
+      [{ x: 0, y: .04, width: 1, height: .53 }, { x: 0, y: .61, width: .485, height: .35 }, { x: .515, y: .61, width: .485, height: .35 }],
+      [{ x: 0, y: .04, width: .485, height: .445 }, { x: .515, y: .04, width: .485, height: .445 }, { x: 0, y: .515, width: .485, height: .445 }, { x: .515, y: .515, width: .485, height: .445 }],
+      [{ x: 0, y: .04, width: .485, height: .43 }, { x: .515, y: .04, width: .485, height: .43 }, { x: 0, y: .51, width: .315, height: .45 }, { x: .3425, y: .51, width: .315, height: .45 }, { x: .685, y: .51, width: .315, height: .45 }],
     ];
+    const zones = templates[Math.min(pageImages.length, 5) - 1];
+    return pageImages.slice(0, 5).map((image, index) => ({
+      imageId: image.id,
+      x: rect.x + zones[index].x * rect.width,
+      y: rect.y + zones[index].y * rect.height,
+      width: zones[index].width * rect.width,
+      height: zones[index].height * rect.height,
+    }));
+  };
 
-    pageImages.slice(0, 4).forEach((image, index) => {
-      frames.push(
-        fitAspectRatioInside(image, storyZones[index])
-      );
+  const applyPhotoFitting = (frames: DynamicFrame[], pageImages: StoredImage[]): DynamicFrame[] => {
+    const imagesById = new Map(pageImages.map((image) => [image.id, image]));
+    return frames.map((frame) => {
+      const image = imagesById.get(frame.imageId);
+      return image ? { ...frame, objectFit: frame.objectFit || "cover", objectPosition: getObjectPosition(image, frame.width / Math.max(frame.height, .0001)) } : frame;
     });
+  };
 
-    return frames;
+  const validatePageFrames = (frames: DynamicFrame[], pageImages: StoredImage[], design: AlbumDesign) => {
+    if (process.env.NODE_ENV === "production") return;
+    const imageIds = new Set(pageImages.map((image) => image.id));
+    const issues: string[] = [];
+    frames.forEach((frame, index) => {
+      if (!imageIds.has(frame.imageId)) issues.push(`frame ${index} references a missing photo`);
+      if (!Number.isFinite(frame.x) || !Number.isFinite(frame.y) || !Number.isFinite(frame.width) || !Number.isFinite(frame.height) || frame.x < 0 || frame.y < 0 || frame.width <= 0 || frame.height <= 0 || frame.x + frame.width > 100.001 || frame.y + frame.height > 100.001) issues.push(`frame ${index} is outside page bounds`);
+    });
+    if (frames.length !== pageImages.length || new Set(frames.map((frame) => frame.imageId)).size !== pageImages.length) issues.push("each page photo must have exactly one frame");
+    // Collage is the only intentional overlap. Story is a checked grid.
+    if (design !== "collage") for (let i = 0; i < frames.length; i += 1) for (let j = i + 1; j < frames.length; j += 1) {
+      const a = frames[i]; const b = frames[j];
+      if (Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x) > .01 && Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y) > .01) issues.push(`frames ${i} and ${j} overlap`);
+    }
+    if (issues.length) console.warn("Invalid album page layout:", issues, frames);
   };
 
   const calculateDynamicFrames = (
@@ -1810,7 +2097,9 @@ export default function Home() {
         );
     }
 
-    return toPercentFrames(pixelFrames);
+    const frames = applyPhotoFitting(toPercentFrames(pixelFrames), pageImages);
+    validatePageFrames(frames, pageImages, effectiveDesign);
+    return frames;
   };
 
   const getPageLayoutScore = (
@@ -1869,7 +2158,7 @@ export default function Home() {
         albumImages.length - imageIndex;
 
       const maximumOnPage =
-        Math.min(4, remaining);
+        Math.min(5, remaining);
 
       let bestCount = 1;
       let bestScore = Number.NEGATIVE_INFINITY;
@@ -1928,35 +2217,6 @@ export default function Home() {
   // CREATE ALBUM
   // =====================================================
 
-  // Keep AI-generated crops visually centered and face-aware without
-  // depending on a separate photo-fitting-engine export. This is deterministic:
-  // the same image + face boxes always produce the same position.
-  const getPhotoObjectPosition = (
-    image: StoredImage
-  ): string => {
-    const faces = image.faces ?? [];
-
-    if (faces.length === 0) {
-      return "50% 50%";
-    }
-
-    const imageWidth = Math.max(image.width ?? 1, 1);
-    const imageHeight = Math.max(image.height ?? 1, 1);
-
-    const center = faces.reduce(
-      (accumulator, face) => ({
-        x: accumulator.x + face.x + face.width / 2,
-        y: accumulator.y + face.y + face.height / 2,
-      }),
-      { x: 0, y: 0 }
-    );
-
-    const x = Math.max(0, Math.min(100, (center.x / faces.length / imageWidth) * 100));
-    const y = Math.max(0, Math.min(100, (center.y / faces.length / imageHeight) * 100));
-
-    return `${x.toFixed(2)}% ${y.toFixed(2)}%`;
-  };
-
   // Convert the AI album engine output into the existing OpenPageFlip page model.
   const convertAIAlbumToPages = (
     aiAlbum: GeneratedAlbum,
@@ -1978,7 +2238,6 @@ export default function Home() {
           .map((slot) => {
             const normalizeCoordinate = (value: number) =>
               Math.abs(value) <= 1 ? value * 100 : value;
-            const image = imageById.get(slot.photoId as string)!;
             return {
               imageId: slot.photoId as string,
               x: normalizeCoordinate(slot.x),
@@ -1986,7 +2245,6 @@ export default function Home() {
               width: normalizeCoordinate(slot.width),
               height: normalizeCoordinate(slot.height),
               objectFit: slot.objectFit,
-              objectPosition: getPhotoObjectPosition(image),
             };
           });
 
@@ -1995,10 +2253,12 @@ export default function Home() {
             ? frames
             : calculateDynamicFrames(pageImages, fallbackDesign, "classic");
 
+        const fittedFrames = applyPhotoFitting(safeFrames, pageImages);
+        validatePageFrames(fittedFrames, pageImages, fallbackDesign);
         return {
           id: aiPage.id || `ai-page-${pageIndex + 1}`,
           images: pageImages,
-          frames: safeFrames,
+          frames: fittedFrames,
           frameStyle: aiPage.frame.style,
           layoutDesign: fallbackDesign,
         };
@@ -2028,6 +2288,7 @@ export default function Home() {
         );
 
         setAlbumPages([]);
+        designLayoutCache.current.clear();
 
         setBookOpened(
           false
@@ -2118,6 +2379,7 @@ export default function Home() {
         ];
 
         setImages(arrangedImages);
+        setCoverImageId(arrangedImages[0]?.id ?? null);
 
         const aiPages = convertAIAlbumToPages(
           aiAlbum,
@@ -2125,11 +2387,15 @@ export default function Home() {
           requestedDesign
         );
 
-        setAlbumPages(
-          aiPages.length > 0
-            ? aiPages
-            : generateAlbumPages(arrangedImages, requestedDesign, requestedTheme)
-        );
+        const generatedPages = aiPages.length > 0
+          ? aiPages
+          : generateAlbumPages(arrangedImages, requestedDesign, requestedTheme);
+
+        // The initial AI result is a document snapshot. Seed the selected
+        // design cache from those exact frames so returning to this design
+        // restores it instead of producing a replacement layout.
+        generatedPages.forEach((page) => storeDesignLayout(page, requestedDesign));
+        setAlbumPages(generatedPages);
 
         setBookKey(
           (previous) =>
@@ -2236,10 +2502,9 @@ export default function Home() {
     setAlbumPages((previousPages) =>
       previousPages.map((page) => ({
         ...page,
-        frames: calculateDynamicFrames(
+        frames: getStableDynamicFrames(
           page.images,
-          design,
-          "classic"
+          design
         ),
         layoutDesign: design,
       }))
@@ -2401,15 +2666,35 @@ export default function Home() {
 
       setImages(updatedImages);
 
-      // Recalculate the whole page layout because cropping can change
-      // the photograph's aspect ratio and therefore its ideal frame.
-      setAlbumPages(
-        generateAlbumPages(
-          updatedImages,
-          albumDesign,
-          albumTheme
-        )
+      const editedImage = updatedImages.find(
+        (image) => image.id === selectedImage.id
       );
+
+      if (editedImage) {
+        // Editing a photo is explicit, but it is not a request to rearrange
+        // the document. Preserve every frame rectangle and photo assignment;
+        // only refresh the edited photo's focal crop for its existing frame.
+        updateCachedPhotoFitting(editedImage);
+        setAlbumPages((currentPages) =>
+          currentPages.map((page) => ({
+            ...page,
+            images: page.images.map((image) =>
+              image.id === editedImage.id ? editedImage : image
+            ),
+            frames: page.frames.map((frame) =>
+              frame.imageId === editedImage.id
+                ? {
+                    ...frame,
+                    objectPosition: getObjectPosition(
+                      editedImage,
+                      frame.width / Math.max(frame.height, 0.0001)
+                    ),
+                  }
+                : frame
+            ),
+          }))
+        );
+      }
 
       setBookKey(
         (previous) => previous + 1
@@ -2694,16 +2979,6 @@ export default function Home() {
         onClick={() => openPhotoEditor(image)}
         aria-label={`Edit ${image.name || "photograph"}`}
       >
-        <img
-          src={
-            image.data
-          }
-          alt=""
-          aria-hidden="true"
-          className="album-photo-background"
-          style={{ objectPosition }}
-        />
-
         <img
           src={
             image.data
@@ -3157,6 +3432,14 @@ export default function Home() {
     page: AlbumPage
   ) => {
     const pageDesign = getPageDesign(page);
+    // Older/generated album snapshots may still contain the former collage
+    // coordinates, where photo five occupied the centre as an overlay.
+    // Resolve this at render time as well, so already-created albums are fixed
+    // immediately rather than only albums generated after this code update.
+    const visibleFrames =
+      pageDesign === "collage" && page.images.length === 5
+        ? calculateDynamicFrames(page.images, "collage", "classic")
+        : page.frames;
 
     return (
       <div
@@ -3191,7 +3474,7 @@ export default function Home() {
           Drag a photo onto another to swap
         </div>
 
-        {page.frames.map((frame) => {
+        {visibleFrames.map((frame) => {
           const image = page.images.find((item) => item.id === frame.imageId);
           if (!image) return null;
 
@@ -3257,12 +3540,41 @@ export default function Home() {
                 objectPosition={frame.objectPosition}
                 objectFit={frame.objectFit || "cover"}
               />
+
+              <button
+                type="button"
+                className="album-photo-remove-button"
+                aria-label={`Remove ${image.name || "photograph"} from this page`}
+                title="Remove photo from this page"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  removePhotoFromAlbumPage(page.id, image.id);
+                }}
+                onMouseDown={(event) => {
+                  // Prevent the remove control from starting a drag
+                  // on the photo underneath it.
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onPointerDown={(event) => {
+                  // OpenPageFlip listens to pointer gestures. Isolating this
+                  // control prevents a removal tap from being read as a page
+                  // turn, especially on touch devices.
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
             </div>
           );
         })}
       </div>
     );
   };
+
+  const coverImage = images.find((image) => image.id === coverImageId) ?? images[0];
 
   // =====================================================
   // UI
@@ -3294,6 +3606,63 @@ export default function Home() {
 
         .album-photo-button:hover .album-photo-edit-hint {
           opacity: 1;
+        }
+
+        /* ===============================================
+           REMOVE PHOTO CONTROL
+        =============================================== */
+
+        .album-photo-remove-button {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          z-index: 12;
+          width: 27px;
+          height: 27px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          border: 1px solid rgba(255,255,255,0.78);
+          border-radius: 50%;
+          background: rgba(18,20,22,0.78);
+          color: #fff;
+          font-family: Arial, sans-serif;
+          font-size: 20px;
+          font-weight: 400;
+          line-height: 1;
+          cursor: pointer;
+          opacity: 0;
+          transform: scale(0.92);
+          box-shadow: 0 3px 10px rgba(0,0,0,0.32);
+          backdrop-filter: blur(6px);
+          transition:
+            opacity 140ms ease,
+            transform 140ms ease,
+            background 140ms ease,
+            border-color 140ms ease;
+        }
+
+        .dynamic-photo-slot:hover .album-photo-remove-button,
+        .album-photo-remove-button:focus-visible {
+          opacity: 1;
+          transform: scale(1);
+        }
+
+        .album-photo-remove-button:hover {
+          background: rgba(190, 42, 42, 0.94);
+          border-color: rgba(255,255,255,0.95);
+          transform: scale(1.06);
+        }
+
+        .album-photo-remove-button:active {
+          transform: scale(0.96);
+        }
+
+        .album-photo-remove-button span {
+          display: block;
+          transform: translateY(-1px);
+          pointer-events: none;
         }
 
         /* ===============================================
@@ -3923,7 +4292,6 @@ export default function Home() {
           box-sizing: border-box;
         }
 
-        .album-photo-background,
         .album-photo-main {
           position: absolute;
           inset: 0;
@@ -3937,28 +4305,16 @@ export default function Home() {
           box-sizing: border-box;
         }
 
-        /*
-         * The layout engine already calculates every frame at the real
-         * photograph aspect ratio. The background therefore does not need
-         * to crop/blur the original photo to hide empty space. Keeping it
-         * subtle prevents the duplicate image layer from making the main
-         * photograph look soft.
-         */
-        .album-photo-background {
-          z-index: 0;
-          object-fit: cover;
-          transform: none;
-          filter: none;
-          opacity: 0;
-          pointer-events: none;
-        }
-
         .album-photo-main {
           z-index: 1;
           object-fit: cover;
           object-position: 50% 50%;
-          backface-visibility: hidden;
-          image-rendering: auto;
+          /* Sharpness: no 3D promotion and no browser smoothing hints.
+             backface-visibility/translateZ made the flipbook rasterise the
+             photographs at 1x, which is what looked blurry on retina screens. */
+          backface-visibility: visible;
+          transform: none;
+          image-rendering: high-quality;
         }
 
         .dynamic-frame-fullBleed .album-photo-frame {
@@ -4734,30 +5090,39 @@ export default function Home() {
           z-index: 1;
         }
 
-        .dynamic-design-story .dynamic-photo-slot:nth-child(1) {
-          z-index: 4;
-          transform: rotate(-1deg);
-        }
-
-        .dynamic-design-story .dynamic-photo-slot:nth-child(2) {
-          z-index: 3;
-          transform: rotate(1.5deg);
-        }
-
-        .dynamic-design-story .dynamic-photo-slot:nth-child(3) {
-          z-index: 2;
-          transform: rotate(-1.2deg);
-        }
-
-        .dynamic-design-story .dynamic-photo-slot:nth-child(4) {
-          z-index: 3;
-          transform: rotate(0.8deg);
-        }
+        .dynamic-design-story .dynamic-photo-slot { z-index: 1; transform: none; }
 
         .dynamic-design-editorial .album-photo-main,
         .dynamic-design-story .album-photo-main {
           width: 100%;
           height: 100%;
+        }
+
+        /* A page is a single stacking context: paper, decorations, photos,
+           then controls. Theme artwork and pseudo-elements can never paint
+           over a photograph, regardless of theme or design-specific rules. */
+        .dynamic-template-page::before { z-index: 0 !important; }
+        .dynamic-template-page::after,
+        .theme-decorations { z-index: 1 !important; }
+        .dynamic-template-page .dynamic-photo-slot { z-index: 10 !important; }
+        .dynamic-design-collage .dynamic-photo-slot:nth-child(1) { z-index: 14 !important; }
+        .dynamic-design-collage .dynamic-photo-slot:nth-child(2) { z-index: 13 !important; }
+        .dynamic-design-collage .dynamic-photo-slot:nth-child(3) { z-index: 15 !important; }
+        .dynamic-design-collage .dynamic-photo-slot:nth-child(4) { z-index: 12 !important; }
+        .dynamic-design-editorial .dynamic-photo-slot:nth-child(1) { z-index: 14 !important; }
+        .dynamic-design-editorial .dynamic-photo-slot:nth-child(2) { z-index: 13 !important; }
+        .dynamic-design-editorial .dynamic-photo-slot:nth-child(3) { z-index: 12 !important; }
+        .dynamic-design-editorial .dynamic-photo-slot:nth-child(4) { z-index: 11 !important; }
+        .album-photo-frame { z-index: 10 !important; }
+        .album-photo-main { z-index: 11 !important; opacity: 1 !important; filter: none !important; }
+        .album-page-edit-button,
+        .album-drag-instruction { z-index: 100 !important; }
+
+        /* Layout changes are discrete selections. Avoid animating slot
+           geometry between templates; otherwise the user can briefly see a
+           hybrid layout when switching away from Story and back. */
+        .dynamic-template-page .dynamic-photo-slot {
+          transition: none !important;
         }
 
         /* =================================================
@@ -5437,17 +5802,6 @@ export default function Home() {
           font-size: 9px;
           letter-spacing: 0.1em;
           opacity: 0.66;
-        }
-
-        .cover-theme-decoration {
-          position: absolute;
-          inset: 0;
-          z-index: 2;
-          pointer-events: none;
-        }
-
-        .cover-theme-decoration .theme-decorations {
-          opacity: 0.7;
         }
 
         .cover-open-hint {
@@ -6180,9 +6534,33 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="ai-album-top-actions">
-                  <button type="button" className="ai-album-top-action" onClick={() => albumPages[0] && openPageEditor(albumPages[0].id)}>
+                  <input
+                    ref={albumAddFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    hidden
+                    onChange={handleAddPhotosToAlbum}
+                  />
+                  <button
+                    type="button"
+                    className="ai-album-top-action"
+                    onClick={() => albumAddFileInputRef.current?.click()}
+                    disabled={images.length >= 10}
+                    title={
+                      images.length >= 10
+                        ? "Remove a photograph before adding another"
+                        : "Upload more photographs into this album"
+                    }
+                  >
                     <span className="ai-album-top-action-icon">⊕</span>
-                    <span className="ai-album-top-action-label">Add Photos</span>
+                    <span className="ai-album-top-action-label">
+                      Add Photos ({images.length}/10)
+                    </span>
+                  </button>
+                  <button type="button" className="ai-album-top-action" onClick={() => albumPages[0] && openPageEditor(albumPages[0].id)}>
+                    <span className="ai-album-top-action-icon">✎</span>
+                    <span className="ai-album-top-action-label">Edit Page</span>
                   </button>
                   <button type="button" className={`ai-album-top-action ${activeAlbumTool === "frames" ? "active" : ""}`} onClick={() => setActiveAlbumTool("frames")}>
                     <span className="ai-album-top-action-icon">▤</span>
@@ -6347,10 +6725,10 @@ export default function Home() {
                       }
                     }}
                   >
-                    {images[0] && (
+                    {coverImage && (
                       <img
                         src={
-                          images[0]
+                          coverImage
                             .data
                         }
                         alt=""
@@ -6360,10 +6738,6 @@ export default function Home() {
 
                     <div className="cover-overlay" />
                     <div className="book-cover-spine" />
-
-                    <div className="cover-theme-decoration">
-                      {themeDecorations}
-                    </div>
 
                     <div className="cover-border">
                       <span className="cover-small-text">
@@ -6587,9 +6961,29 @@ export default function Home() {
 
                 <div className="album-page-editor-body">
                   <div className="page-editor-section">
+                    <h3>Cover photo</h3>
+                    <p className="page-editor-help">
+                      Choose any uploaded photograph for the cover. This does not change a page frame.
+                    </p>
+                    <div className="page-editor-add-grid">
+                      {images.map((image) => (
+                        <button
+                          key={`cover-${image.id}`}
+                          type="button"
+                          className={`page-editor-add-card ${coverImage?.id === image.id ? "selected" : ""}`}
+                          onClick={() => setCoverImageId(image.id)}
+                        >
+                          <img src={image.data} alt={image.name || "Uploaded photo"} />
+                          <span>{coverImage?.id === image.id ? "Cover photo" : "Use on cover"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="page-editor-section">
                     <h3>Photos on this page</h3>
                     <p className="page-editor-help">
-                      Select two photos to swap them, or drag a photo onto another photo in the album.
+                      Select a photo, then swap it with another album photo or upload a replacement. Drag-and-drop swapping still works in the album.
                     </p>
 
                     <div className="page-editor-photo-grid">
@@ -6654,21 +7048,23 @@ export default function Home() {
                   </div>
 
                   <div className="page-editor-section">
-                    <h3>Add / move a picture</h3>
+                    <h3>Add or replace a picture</h3>
                     <p className="page-editor-help">
-                      Choose a photograph already uploaded. It will move here instead of being duplicated.
+                      {pageSwapSourceId
+                        ? "Choose an album photo to swap with the selected frame, or upload a new replacement."
+                        : "Add extra photographs to this page without moving the photographs already here."}
                     </p>
 
                     <input
                       ref={pageAddFileInputRef}
                       type="file"
                       accept="image/*"
-                      multiple
+                      multiple={!pageSwapSourceId}
                       hidden
                       onChange={handleAddPhotosToPage}
                     />
 
-                    {editorPage.images.length < 4 && (
+                    {(pageSwapSourceId || editorPage.images.length < 5) && (
                       <button
                         type="button"
                         className="page-editor-upload-button"
@@ -6678,8 +7074,8 @@ export default function Home() {
                       </button>
                     )}
 
-                    {editorPage.images.length >= 4 ? (
-                      <div className="page-editor-limit">This page already has the maximum of 4 photographs.</div>
+                    {!pageSwapSourceId && editorPage.images.length >= 5 ? (
+                      <div className="page-editor-limit">This page already has the maximum of 5 photographs.</div>
                     ) : otherImages.length ? (
                       <div className="page-editor-add-grid">
                         {otherImages.map((image) => (
@@ -6687,7 +7083,11 @@ export default function Home() {
                             key={image.id}
                             type="button"
                             className="page-editor-add-card"
-                            onClick={() => addExistingImageToPage(image.id, editorPage.id)}
+                            onClick={() =>
+                              pageSwapSourceId
+                                ? requestAlbumSwap(pageSwapSourceId, image.id)
+                                : addExistingImageToPage(image.id, editorPage.id)
+                            }
                           >
                             <img src={image.data} alt={image.name || "Uploaded photo"} />
                             <span>＋ Add</span>

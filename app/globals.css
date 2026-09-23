@@ -988,34 +988,6 @@ body {
 }
 
 
-.album-photo-background {
-  position:
-    absolute;
-
-  inset:
-    -12%;
-
-  width:
-    124%;
-
-  height:
-    124%;
-
-  object-fit:
-    cover;
-
-  opacity:
-    0.4;
-
-  filter:
-    blur(23px)
-    brightness(0.82);
-
-  transform:
-    scale(1.08);
-}
-
-
 .album-photo-main {
   position:
     relative;
@@ -1436,6 +1408,13 @@ body {
     height 220ms ease;
 }
 
+/* Design changes are discrete. Do not animate frame geometry between
+   templates, which can briefly display a hybrid composition. */
+.dynamic-template-page .dynamic-photo-slot {
+  transition: none !important;
+}
+
+
 /* The slot dimensions are calculated from the real image aspect ratio.
    Keeping the border inside the slot prevents the border from changing
    the final frame ratio and creating visible empty bars. */
@@ -1457,12 +1436,11 @@ body {
 
 /* Very small visual differences keep the automatically generated
    pages feeling like a designed physical album rather than a grid. */
-.dynamic-photo-slot:nth-child(odd) {
-  transform: rotate(-0.25deg);
-}
-
+/* Sub-pixel rotation forced the browser to resample every photograph,
+   which softened all the edges once the album was rendered. Removed. */
+.dynamic-photo-slot:nth-child(odd),
 .dynamic-photo-slot:nth-child(even) {
-  transform: rotate(0.25deg);
+  transform: none;
 }
 
 .dynamic-landscape .album-photo-frame {
@@ -2288,11 +2266,6 @@ body {
 /* Existing dynamic engine: crop instead of contain.
    Focal-point values can be supplied through CSS variables. */
 
-.dynamic-photo-slot .album-photo-main {
-  object-fit: cover;
-  object-position: var(--feag-focus-x,50%) var(--feag-focus-y,50%);
-}
-
 .dynamic-photo-slot .album-photo-frame {
   overflow: hidden;
 }
@@ -2428,4 +2401,43 @@ body {
   .generation-progress > span {
     transition: none !important;
   }
+}
+
+
+/* =====================================================
+   SHARP, UNDISTORTED ALBUM PHOTOGRAPHS
+   Added fix: one single source of truth for how a photo fills its frame.
+   The old rules mixed object-fit: contain and cover across stylesheets,
+   which stretched some photos, and the layer promotion below was blurring
+   them inside the flipbook.
+===================================================== */
+
+.album-photo-main,
+.dynamic-photo-slot .album-photo-main,
+.professional-photo-frame .album-photo-main {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  backface-visibility: visible;
+  image-rendering: high-quality;
+}
+
+.professional-photo {
+  transform: none;
+  backface-visibility: visible;
+  image-rendering: high-quality;
+}
+
+.album-photo-frame,
+.dynamic-photo-slot .album-photo-frame {
+  transform: none;
+  filter: none;
+}
+
+/* Keep the flipbook pages on the pixel grid so photos are not resampled. */
+.stf__item,
+.stf__block,
+.demoPage {
+  image-rendering: high-quality;
 }

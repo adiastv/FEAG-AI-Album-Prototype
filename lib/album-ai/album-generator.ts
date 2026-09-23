@@ -191,8 +191,8 @@ function buildPages(groups: PhotoGroup[], photos: PhotoAnalysis[]): AlbumPage[] 
     // one- or two-photo leftover page (for example, 19 becomes 7 / 6 / 6).
     for (let index = 0; index < groupPhotos.length; ) {
       const remaining = groupPhotos.length - index;
-      const pagesNeeded = remaining > 9 ? Math.ceil(remaining / 7) : 1;
-      const pageCount = Math.min(9, Math.ceil(remaining / pagesNeeded));
+      const pagesNeeded = Math.ceil(remaining / 5);
+      const pageCount = Math.min(5, Math.ceil(remaining / pagesNeeded));
       const pagePhotos = groupPhotos.slice(index, index + pageCount);
 
       const layout = createProfessionalLayout(pagePhotos, group.event, group.name);
